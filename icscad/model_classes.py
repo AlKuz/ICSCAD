@@ -2,9 +2,70 @@ import tensorflow as tf
 import numpy as np
 
 
-class MLP:
+class System:
     """
-    Multilayer perceptron
+    The main class of all models.
+    """
+    def __init__(self, input_namespace, output_namespace,
+                 name='System_0', adjacency_matrix=None, **models):
+        """
+        Initialization
+        :param name: Name of the model
+        :param input_namespace: Dictionary of inputs with initial values
+        :param output_namespace: Dictionary of outputs
+        :param adjacency_matrix: Matrix with connection information of all nodes
+        """
+        self._name = name
+        self._input_namespace = input_namespace
+        self._output_namespace = output_namespace
+        self._adjacency_matrix = adjacency_matrix
+        self._system_model = self._compile_system()
+
+    def _compile_system(self):
+
+        return None
+
+    def __add__(self, other):
+        """Add one system to another"""
+
+    def __mul__(self, other): pass
+
+    def __str__(self): pass
+
+    def add_model(self): pass
+
+    def get_model(self): pass
+
+    def set_input_namespace(self, new_input_namespace): self._input_namespace = new_input_namespace
+
+    def set_output_namespace(self, new_output_namespace): self._output_namespace = new_output_namespace
+
+    def set_name(self, new_name): self._name = new_name
+
+    def set_adjacency_matrix(self, adjacency_matrix): self._adjacency_matrix = adjacency_matrix
+
+    def get_input_namespace(self): return self._input_namespace
+
+    def get_output_namespace(self): return self._output_namespace
+
+    def get_name(self): return self._name
+
+    def get_adjacency_matrix(self): return self._adjacency_matrix
+
+
+
+
+
+class Model(System):
+    """
+    The system with only one object.
+    """
+
+
+
+class FNN(Model):
+    """
+    Feedforward neural network class model.
     """
     def __init__(self, structure, act_funs, learn_rate=0.001, epochs=1000):
         """
@@ -33,12 +94,23 @@ class MLP:
         for i in range(len(self.structure)):
             self.weights['w{}'.format(i)] = \
                 tf.Variable(tf.random_uniform([self.structure[i+1], self.structure[i]]))
+    def __init__(self, structure=(1, 1, 1), input_namespace=None, output_namespace=None, name='FNN'):
+        self._set_model_name(name)
+        if input_namespace is None:
+            input_namespace = ['in{}'.format(i+1) for i in range(structure[0])]
+        if output_namespace is None:
+            output_namespace = ['out{}'.format(i+1) for i in range(structure[-1])]
+        self._set_input_namespace(input_namespace)
+        self._set_output_namespace(output_namespace)
+
+        # Network inputs
+        x = tf.placeholder(tf.float32, [None, structure[0]], 'input')
+        y = tf.placeholder(tf.float32, [None, structure[-1]], 'output')
 
 
-
-class RNN:
+class RNN(Model):
     """
-    Recurrent neural network
+    Recurrent neural network class model.
     """
     def __init__(self, structure, connections, names_in=None, names_out=None):
         """
@@ -71,6 +143,27 @@ class RNN:
             self._weights[i] = tf.Variable(tf.random_normal([i+1, i]))
 
 
+class LSTM(Model):
+    pass
+
+
+class CNN(Model):
+    """
+    Convolution neural network class model.
+    """
+    pass
+
+
+class BNN(Model):
+    """
+    Bayesian neural network class model.
+    """
+    pass
+
+
+class FuzzyLogic(Model):
+    pass
+
+
 if __name__ == '__main__':
-    nn = MLP(np.array([1, 5, 1]), [tf.sigmoid, tf.sigmoid])
-    print(1)
+    print("Let's test")
