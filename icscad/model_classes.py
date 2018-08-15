@@ -3,6 +3,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+"""
+Run tensorboard:
+for Linux: tensorboard --logdir=path/to/log-directory
+for Windows: python -m tensorboard.main
+"""
+
+
 class Structure(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -13,27 +20,28 @@ class System:
     """
     The main class of all models.
     """
+    """
     def __init__(self, input_namespace, output_namespace,
                  name='System_0', adjacency_matrix=None, **models):
-        """
+
         Initialization
         :param name: Name of the model
         :param input_namespace: Dictionary of inputs with initial values
         :param output_namespace: Dictionary of outputs
         :param adjacency_matrix: Matrix with connection information of all nodes
-        """
+
         self._name = name
         self._input_namespace = input_namespace
         self._output_namespace = output_namespace
         self._adjacency_matrix = adjacency_matrix
         self._system_model = self._compile_system()
-
-    def _compile_system(self): pass
+    """
 
     def __add__(self, other):
-        """Add one system to another"""
+        """Add one system to another. Systems are parallel."""
 
-    def __mul__(self, other): pass
+    def __mul__(self, other):
+        """Multiple one system to another. System located each other."""
 
     def __str__(self): pass
 
@@ -58,7 +66,7 @@ class System:
     def get_adjacency_matrix(self): return self._adjacency_matrix
 
 
-# Now now
+# Not now
 class Model(System):
     """
     The system with only one object.
@@ -142,9 +150,9 @@ class FNN:
         self._config.save_info.tb = path + name + '/tb/'
         self._config.save_info.model = None  # Save this object
 
-        self._config.update(self.__graph_creation(self._config))
+        self._config.update(self._graph_creation(self._config))
 
-    def __graph_creation(self, config):
+    def _graph_creation(self, config):
         """
         Helper for creating graph.
         :param config: Neural network configuration information
@@ -254,7 +262,146 @@ class CNN(Model):
     """
     Convolution neural network class model.
     """
-    pass
+    def __init__(self, image_size,
+                 depth_lays,
+                 full_con_size,
+                 window_size,
+                 pull_size=2,
+                 batch_size=128,
+                 learn_rate=0.001,
+                 epochs=1000,
+                 loss_fun=tf.losses.mean_squared_error,
+                 train_alg=tf.train.GradientDescentOptimizer,
+                 name='CNN',
+                 path='./results/'):
+        """
+
+        :param image_size: [1024, 768, 3] - width, height, depth
+        :param depth_lays: [6, 10] - depth in each conv layer
+        :param full_con_size: [100, 10] - number of neurons in the hidden layers, number of output classes
+        :param window_size: [5, 5]
+        :param pull_size: 2 - pooling in each layer
+        :param batch_size: Number of images in the one step during training algorithm
+        :param learn_rate: Velocity of training
+        :param epochs: Number of training epochs
+        :param loss_fun: Function for calculation faults of neural network. Possible loss functions:
+            tf.losses.absolute_difference
+            tf.losses.cosine_distance
+            tf.losses.huber_loss
+            tf.losses.log_loss
+            tf.losses.mean_pairwise_squared_error
+            tf.losses.mean_squared_error
+            -- add other loss functions: loss_function(labels, prediction), where
+                labels: The ground truth output tensor, same dimensions as 'predictions'.
+                predictions: The predicted outputs.
+        :param train_alg: Algorithm for minimization network fault. Possible algorithms:
+            tf.train.GradientDescentOptimizer
+            tf.train.AdadeltaOptimizer
+            tf.train.AdagradOptimizer
+            tf.train.AdagradDAOptimizer
+            tf.train.MomentumOptimizer
+            tf.train.AdamOptimizer
+            tf.train.FtrlOptimizer
+            tf.train.ProximalGradientDescentOptimizer
+            tf.train.ProximalAdagradOptimizer
+            tf.train.RMSPropOptimizer
+        :param name: Name of the model. It is using for creating folder with saved model.
+        :param path: Path for saved models and data
+        """
+        self._config = Structure()
+        self._config.graph = Structure()
+        self._config.save_info = Structure()
+
+        self._config.image_size = image_size
+        self._config.depth_lays = [image_size[2]] + depth_lays
+        self._config.full_con_size = full_con_size
+        self._config.window_size = window_size
+        self._config.pull_size = pull_size
+        self._config.batch_size = batch_size
+        self._config.learn_rate = learn_rate
+        self._config.epochs = epochs
+        self._config.name = name
+
+        self._config.graph.graph_model = tf.Graph()
+        self._config.graph.input = None
+        self._config.graph.output = None
+        self._config.graph.keep_prob = None
+        self._config.graph.model = None
+        self._config.graph.optimizer = None
+        self._config.graph.loss = 0
+        self._config.graph.train_alg = train_alg
+        self._config.graph.loss_fun = loss_fun
+
+        self._config.save_info.path = path
+        self._config.save_info.tf = path + name + '/tf/{}'.format(name + '.ckpt')
+        self._config.save_info.tb = path + name + '/tb/'
+        self._config.save_info.model = None  # Save this object
+
+        self._config.update(self._graph_creation(self._config))
+
+    def _graph_creation(self, config):
+        """
+        Helper for creating graph.
+        :param config: Neural network configuration information
+        :return: Config with added models
+        """
+        # Saving everything in this graph
+        # config.graph.graph_model.as_default()
+        with tf.Session(graph=config.graph.graph_model):
+            # Input placeholders
+            config.graph.input = tf.placeholder(tf.float32, [None, np.prod(config.image_size)], 'input')
+            config.graph.output = tf.placeholder(tf.float32, [None, config.full_con_size[-1]], 'output')
+            config.graph.keep_prob = tf.placeholder(tf.float32, 1, 'keep_prob')
+
+            # Creating layers
+            model = tf.reshape(config.graph.input, shape=[-1]+config.image_size, name='reshaping')
+
+            # Creating convolution layers
+            for i in range(1, len(config.depth_lays)):
+                model = self._conv(model, i, config)
+
+            # Creating fully connection layers
+            config.full_con_size = [np.prod(model.get_shape().as_list()[1:])] + config.full_con_size
+            model = tf.reshape(model, shape=[-1, config.full_con_size[0]], name='reshaping')
+            for i in range(1, len(config.full_con_size)):
+                model = self._full_con(model, i, config)
+
+            config.graph.model = model
+
+            # Cost function
+            config.graph.loss = config.graph.loss_fun(config.graph.output, config.graph.model)
+            config.graph.optimizer = config.graph.train_alg(config.learn_rate).minimize(config.graph.loss)
+
+            # Save graph for tensorboard visualization
+
+            tf.summary.FileWriter(config.save_info.tb, graph=config.graph.graph_model)
+
+        return config
+
+    def _conv(self, inp, layer_num, config, strides=1):
+        with tf.name_scope('Conv_{}'.format(layer_num)):
+            shape = config.window_size + config.depth_lays[layer_num-1:layer_num+1]
+            weights = tf.Variable(tf.random_uniform(shape, -1, 1, tf.float32), name='weights')
+            biases = tf.Variable(tf.random_uniform([config.depth_lays[layer_num]], -1, 1, tf.float32), name='biases')
+            conv = tf.nn.conv2d(inp, weights, strides=[1, strides, strides, 1], padding='SAME')
+            conv = tf.nn.relu(tf.add(conv, biases))
+            k = config.pull_size
+            conv = tf.nn.max_pool(conv, ksize=[1, k, k, 1], strides=[1, k, k, 1], padding='SAME')
+            return conv
+
+    def _full_con(self, inp, layer_num, config):
+        with tf.name_scope('Full_con_{}'.format(layer_num)):
+            shape = config.full_con_size[layer_num-1:layer_num+1]
+            weights = tf.Variable(tf.random_uniform(shape, -1, 1, tf.float32), name='weights')
+            biases = tf.Variable(tf.random_uniform([config.full_con_size[layer_num]], -1, 1, tf.float32), name='biases')
+            full_con = tf.matmul(inp, weights)
+            full_con = tf.nn.relu(tf.add(full_con, biases))
+            return full_con
+
+
+    def __call__(self, *args, **kwargs):
+        pass
+
 
 
 class BNN(Model):
@@ -277,10 +424,13 @@ if __name__ == '__main__':
     freq = Data_JC[0:-1:steps, 2] / 200000.0
     temp = Data_JC[0:-1:steps, 3] / 1000.0
 
-    nn = FNN()
-    nn.train(fuel, freq)
-    res = nn(fuel)
-    plt.plot(res)
-    plt.plot(freq)
-    plt.show()
+    # nn = FNN()
+    # nn.train(fuel, freq)
+    # res = nn(fuel)
+    # plt.plot(res)
+    # plt.plot(freq)
+    # plt.show()
 
+    nn = CNN(image_size=[1024, 768, 3], depth_lays=[1, 1, 1],
+             full_con_size=[1000, 10], window_size=[5, 5], pull_size=4)
+    print()
