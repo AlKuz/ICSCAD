@@ -1,7 +1,8 @@
-import tensorflow as tf
-import numpy as np
 import matplotlib.pyplot as plt
-
+import numpy as np
+from skimage.io import imshow
+import tensorflow as tf
+from tensorflow.examples.tutorials.mnist import input_data
 
 """
 Run tensorboard:
@@ -267,11 +268,11 @@ class CNN(Model):
                  full_con_size,
                  window_size,
                  pull_size=2,
-                 batch_size=128,
+                 batch_size=100,
                  learn_rate=0.001,
                  epochs=1000,
-                 loss_fun=tf.losses.mean_squared_error,
-                 train_alg=tf.train.GradientDescentOptimizer,
+                 loss_fun=tf.losses.softmax_cross_entropy,
+                 train_alg=tf.train.AdamOptimizer,
                  name='CNN',
                  path='./results/'):
         """
@@ -291,6 +292,7 @@ class CNN(Model):
             tf.losses.log_loss
             tf.losses.mean_pairwise_squared_error
             tf.losses.mean_squared_error
+            tf.losses.sparse_softmax_cross_entropy
             -- add other loss functions: loss_function(labels, prediction), where
                 labels: The ground truth output tensor, same dimensions as 'predictions'.
                 predictions: The predicted outputs.
@@ -347,33 +349,39 @@ class CNN(Model):
         """
         # Saving everything in this graph
         # config.graph.graph_model.as_default()
-        with tf.Session(graph=config.graph.graph_model):
+        with tf.Session(graph=config.graph.graph_model) as sess:
             # Input placeholders
             config.graph.input = tf.placeholder(tf.float32, [None, np.prod(config.image_size)], 'input')
             config.graph.output = tf.placeholder(tf.float32, [None, config.full_con_size[-1]], 'output')
-            config.graph.keep_prob = tf.placeholder(tf.float32, 1, 'keep_prob')
+            # config.graph.keep_prob = tf.placeholder(tf.float32, 1, 'keep_prob')
+            with tf.name_scope(config.name):
+                # Creating layers
+                model = tf.reshape(config.graph.input, shape=[-1]+config.image_size, name='reshaping')
 
-            # Creating layers
-            model = tf.reshape(config.graph.input, shape=[-1]+config.image_size, name='reshaping')
+                # Creating convolution layers
+                for i in range(1, len(config.depth_lays)):
+                    model = self._conv(model, i, config)
 
-            # Creating convolution layers
-            for i in range(1, len(config.depth_lays)):
-                model = self._conv(model, i, config)
+                # Creating fully connection layers
+                config.full_con_size = [np.prod(model.get_shape().as_list()[1:])] + config.full_con_size
+                model = tf.reshape(model, shape=[-1, config.full_con_size[0]], name='reshaping')
+                for i in range(1, len(config.full_con_size)):
+                    model = self._full_con(model, i, config)
 
-            # Creating fully connection layers
-            config.full_con_size = [np.prod(model.get_shape().as_list()[1:])] + config.full_con_size
-            model = tf.reshape(model, shape=[-1, config.full_con_size[0]], name='reshaping')
-            for i in range(1, len(config.full_con_size)):
-                model = self._full_con(model, i, config)
+                # This is only for class prediction. Return position of maximum value
+                # model = [tf.argmax(model, axis=1)]
 
-            config.graph.model = model
+                config.graph.model = model
 
-            # Cost function
+            # Cost function and train algorithm
             config.graph.loss = config.graph.loss_fun(config.graph.output, config.graph.model)
             config.graph.optimizer = config.graph.train_alg(config.learn_rate).minimize(config.graph.loss)
 
-            # Save graph for tensorboard visualization
+            # Save graph session for further using
+            sess.run(tf.global_variables_initializer())
+            tf.train.Saver().save(sess, config.save_info.tf)
 
+            # Save graph for tensorboard visualization
             tf.summary.FileWriter(config.save_info.tb, graph=config.graph.graph_model)
 
         return config
@@ -395,12 +403,50 @@ class CNN(Model):
             weights = tf.Variable(tf.random_uniform(shape, -1, 1, tf.float32), name='weights')
             biases = tf.Variable(tf.random_uniform([config.full_con_size[layer_num]], -1, 1, tf.float32), name='biases')
             full_con = tf.matmul(inp, weights)
-            full_con = tf.nn.relu(tf.add(full_con, biases))
-            return full_con
+            if layer_num != len(config.full_con_size) - 1:
+                full_con = tf.nn.relu(tf.add(full_con, biases))
+            else:
+                full_con = tf.nn.softmax(tf.add(full_con, biases))
+        return full_con
 
+    def train(self, input_data, target_data):
+        with tf.Session(graph=self._config.graph.graph_model) as sess:
+            # Load previous session
+            saver = tf.train.Saver()
+            saver.restore(sess, self._config.save_info.tf)
+            # Parameters initializing
+            sess.run(tf.global_variables_initializer())
+            data_len = input_data.shape[0]
+            loss = 0
 
-    def __call__(self, *args, **kwargs):
-        pass
+            for e in range(self._config.epochs):
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # !!! Add changing learn rate in each step using parabola loss estimating!!!
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                for b in range(data_len // self._config.batch_size):
+                    inp = input_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
+                    tar = target_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
+                    _, loss = sess.run([self._config.graph.optimizer, self._config.graph.loss],
+                                       feed_dict={self._config.graph.input: inp,
+                                                  self._config.graph.output: tar})
+                print('Epoch = {}, cost = {}'.format(e, loss))
+
+            # Save results
+            saver.save(sess, self._config.save_info.tf)
+
+    def __call__(self, input_data):
+        with tf.Session(graph=self._config.graph.graph_model) as sess:
+            # load previous session
+            saver = tf.train.Saver()
+            saver.restore(sess, self._config.save_info.tf)
+            data_len = len(input_data)
+            result = np.zeros((data_len, self._config.full_con_size[-1]))
+            for i in range(data_len):
+                x = input_data.shape
+                inp = input_data[i, :].reshape((1, np.prod(self._config.image_size)))
+                result[i] = sess.run(self._config.graph.model,
+                                     feed_dict={self._config.graph.input: inp})
+            return result
 
 
 
@@ -417,20 +463,38 @@ class FuzzyLogic(Model):
 
 if __name__ == '__main__':
     print("Let's test")
-    # tf.reduce_mean(-1 * (self.net_out * tf.log(self.model) + (1 - self.net_out) * tf.log(1 - self.model)))
-    Data_JC = np.genfromtxt('../data/Data_JetCat_P60.csv', delimiter=',')
-    steps = 1000
-    fuel = Data_JC[0:-1:steps, 1] / 4.0
-    freq = Data_JC[0:-1:steps, 2] / 200000.0
-    temp = Data_JC[0:-1:steps, 3] / 1000.0
+    # Data_JC = np.genfromtxt('../data/Data_JetCat_P60.csv', delimiter=',')
+    # steps = 1000
+    # fuel = Data_JC[0:-1:steps, 1] / 4.0
+    # freq = Data_JC[0:-1:steps, 2] / 200000.0
+    # temp = Data_JC[0:-1:steps, 3] / 1000.0
 
-    # nn = FNN()
+    # nn = FNN(structure=(1, 100000, 1), learn_rate=0.0001, epochs=1000000)
     # nn.train(fuel, freq)
     # res = nn(fuel)
     # plt.plot(res)
     # plt.plot(freq)
     # plt.show()
 
-    nn = CNN(image_size=[1024, 768, 3], depth_lays=[1, 1, 1],
-             full_con_size=[1000, 10], window_size=[5, 5], pull_size=4)
-    print()
+    nn = CNN(image_size=[28, 28, 1], depth_lays=[2, 4], batch_size=1000,
+             full_con_size=[100, 10], window_size=[5, 5], pull_size=2)
+
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    print(mnist.train.images.shape, mnist.train.labels.shape)
+    """
+    left = 2.5
+    top = 2.5
+
+    fig = plt.figure(figsize=(10, 10))
+
+    for i in range(6):
+        ax = fig.add_subplot(3, 2, i + 1)
+        im = np.reshape(mnist.train.images[i, :], [28, 28])
+
+        label = np.argmax(mnist.train.labels[i, :])
+        ax.imshow(im, cmap='Greys')
+        ax.text(left, top, str(label))
+    plt.show()
+    """
+    # nn.train(mnist.train.images, mnist.train.labels)
+    print(nn(mnist.train.images[0:4]))
