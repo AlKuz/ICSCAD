@@ -11,70 +11,127 @@ for Windows: python -m tensorboard.main
 """
 
 
+# Easy way to create structures like in the MatLab
 class Structure(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
 
-# Not now
-class System:
+class Model:
     """
-    The main class of all models.
+    The main class of all models. Everything is model
     """
-    """
-    def __init__(self, input_namespace, output_namespace,
-                 name='System_0', adjacency_matrix=None, **models):
+    def __init__(self, name='Noname', path='./results/'):
+        """
+        :param name: Name of the model. It is using for creating folder with saved model.
+        :param path: Path for saved models and data
+        """
+        self._config = Structure()
+        self._config.graph = Structure()
+        self._config.save_info = Structure()
 
+        self._config.learn_rate = 0.001
+        self._config.epochs = 1000
+        self._config.name = name
+
+        self._config.graph.graph_model = tf.Graph()
+        self._config.graph.input = None
+        self._config.graph.output = None
+        self._config.graph.model = None
+        self._config.graph.optimizer = None
+        self._config.graph.loss = 0
+        self._config.graph.train_alg = tf.train.GradientDescentOptimizer
+        self._config.graph.loss_fun = tf.losses.mean_squared_error
+        self._config.graph.trainable = True
+
+        self._config.save_info.path = path
+        self._config.save_info.tf = path + name + '/tf/{}'.format(name + '.ckpt')
+        self._config.save_info.tb = path + name + '/tb/'
+        self._config.save_info.model = None  # Save this object
+
+    def __add__(self, other):
+        """Add one model to another. Models are parallel."""
+
+    def __mul__(self, other):
+        """Multiple one Model to another. Models located each other."""
+
+    def __str__(self): pass
+
+    def __call__(self, input_data):
+        with tf.Session() as sess:
+            # load previous session
+            saver = tf.train.Saver()
+            saver.restore(sess, self._config.save_info.tf)
+            data_len = len(input_data)
+            result = np.zeros((data_len, self._config.structure[-1]))
+            input_data = input_data.reshape((data_len, self._config.structure[0]))
+            for i in range(data_len):
+                inputs = input_data[i, :].reshape((1, self._config.structure[0]))
+                result[i] = sess.run(self._config.graph.model,
+                                     feed_dict={self._config.graph.input: inputs})
+            return result
+
+    def set_epochs(self, epochs): self._config.epochs = epochs
+
+    def set_learning_rate(self, learn_rate): self._config.learn_rate = learn_rate
+
+    def set_name(self, name):
+        self._config.name = name
+        self._config.save_info.tf = self._config.save_info.path + name + '/tf/{}'.format(name + '.ckpt')
+        self._config.save_info.tb = self._config.save_info.path + name + '/tb/'
+
+    def set_path(self, path):
+        self._config.save_info.path = path
+        self._config.save_info.tf = path + self._config.name + '/tf/{}'.format(self._config.name + '.ckpt')
+        self._config.save_info.tb = path + self._config.name + '/tb/'
+
+    def set_train_algorithm(self, algorithm): self._config.graph.train_alg = algorithm
+
+    def set_loss_function(self, function): self._config.graph.loss_fun = function
+
+    def get_epochs(self): return self._config.epochs
+
+    def get_learning_rate(self): return self._config.learn_rate
+
+    def get_name(self): return self._config.name
+
+    def get_path(self): return self._config.save_info.path
+
+    def get_train_algorithm(self): return self._config.graph.train_alg
+
+    def get_loss_function(self): return self._config.graph.loss_fun
+
+
+class System(Model):
+    """
+    Connections between more than one model are system. Two and more systems can connect in the big system.
+    """
+    def __init__(self, input_namespace, output_namespace, name='System_0', path='./results/'):
+        """
         Initialization
         :param name: Name of the model
         :param input_namespace: Dictionary of inputs with initial values
         :param output_namespace: Dictionary of outputs
         :param adjacency_matrix: Matrix with connection information of all nodes
-
-        self._name = name
-        self._input_namespace = input_namespace
-        self._output_namespace = output_namespace
-        self._adjacency_matrix = adjacency_matrix
-        self._system_model = self._compile_system()
-    """
-
-    def __add__(self, other):
-        """Add one system to another. Systems are parallel."""
-
-    def __mul__(self, other):
-        """Multiple one system to another. System located each other."""
-
-    def __str__(self): pass
+        """
+        super().__init__(name=name, path=path)
+        self._config.input_namespace = input_namespace
+        self._config.output_namespace = output_namespace
 
     def add_model(self): pass
 
     def get_model(self): pass
 
-    def set_input_namespace(self, new_input_namespace): self._input_namespace = new_input_namespace
+    def set_input_namespace(self, new_input_namespace): self._config.input_namespace = new_input_namespace
 
-    def set_output_namespace(self, new_output_namespace): self._output_namespace = new_output_namespace
+    def set_output_namespace(self, new_output_namespace): self._config.output_namespace = new_output_namespace
 
-    def set_name(self, new_name): self._name = new_name
+    def get_input_namespace(self): return self._config.input_namespace
 
-    def set_adjacency_matrix(self, adjacency_matrix): self._adjacency_matrix = adjacency_matrix
-
-    def get_input_namespace(self): return self._input_namespace
-
-    def get_output_namespace(self): return self._output_namespace
-
-    def get_name(self): return self._name
-
-    def get_adjacency_matrix(self): return self._adjacency_matrix
+    def get_output_namespace(self): return self._config.output_namespace
 
 
-# Not now
-class Model(System):
-    """
-    The system with only one object.
-    """
-
-
-class FNN:
+class FNN(Model):
     """
     Feedforward neural network class model.
     """
@@ -126,6 +183,7 @@ class FNN:
         :param name: Name of the model. It is using for creating folder with saved model.
         :param path: Path for saved models and data
         """
+        super().__init__(name=name, path=path)
         self._config = Structure()
         self._config.graph = Structure()
         self._config.save_info = Structure()
