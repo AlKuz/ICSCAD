@@ -15,7 +15,8 @@ for Windows: python -m tensorboard.main
 TO DO
 1. Fix save method - it doesn't work
 2. Add changing learn rate in each step using parabola loss estimating
-3. Fix train method
++3. Fix train method // Fixed, but training is better only with batch_size == 1
+4. Add dirrectory autocreating
 """
 
 # Easy way to create structures like in the MatLab
@@ -75,7 +76,7 @@ class Model:
             data_len = len(input_data)
             result = np.zeros((data_len, self._config.num_outputs))
             for i in range(data_len):
-                inp = input_data[i, :].reshape((1, self._config.num_inputs))
+                inp = input_data[i].reshape((1, self._config.num_inputs))
                 result[i] = sess.run(self._config.graph.model,
                                      feed_dict={self._config.graph.input: inp})
             return result
@@ -96,7 +97,10 @@ class Model:
                 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 for b in range(data_len // self._config.batch_size):
                     inp = input_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
+                    inp = inp.reshape((self._config.batch_size, self._config.num_inputs))
+
                     tar = target_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
+                    tar = tar.reshape((self._config.batch_size, self._config.num_outputs))
 
                     _, loss = sess.run([self._config.graph.optimizer, self._config.graph.loss],
                                        feed_dict={self._config.graph.input: inp,
@@ -507,25 +511,27 @@ class FuzzyLogic(Model):
 if __name__ == '__main__':
     print("Let's test")
     Data_JC = np.genfromtxt('../data/Data_JetCat_P60.csv', delimiter=',')
-    steps = 1000
+    steps = 100
     fuel = Data_JC[0:-1:steps, 1] / 4.0
     freq = Data_JC[0:-1:steps, 2] / 200000.0
     temp = Data_JC[0:-1:steps, 3] / 1000.0
-
-    nn = FNN(structure=(1, 5, 1), learn_rate=0.01, epochs=100)
+    """
+    nn = FNN(structure=(1, 5, 1), learn_rate=0.01, epochs=1000)
     nn.train(fuel, freq)
+    nn.set_batch_size(10000)
+    nn.set_train_algorithm(tf.train.AdamOptimizer)
     # nn.save()
     res = nn(fuel)
     plt.plot(res)
     plt.plot(freq)
     plt.show()
-
-    # nn = CNN(image_size=[28, 28, 1], depth_lays=[2, 4], batch_size=1000,
-    #          full_con_size=[100, 10], window_size=[5, 5], pull_size=2)
-
-    # mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-    # print(mnist.train.images.shape, mnist.train.labels.shape)
     """
+    nn = CNN(image_size=[28, 28, 1], depth_lays=[2, 4], batch_size=1000,
+             full_con_size=[100, 10], window_size=[5, 5], pull_size=2)
+
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    print(mnist.train.images.shape, mnist.train.labels.shape)
+
     left = 2.5
     top = 2.5
 
@@ -539,6 +545,6 @@ if __name__ == '__main__':
         ax.imshow(im, cmap='Greys')
         ax.text(left, top, str(label))
     plt.show()
-    """
-    # nn.train(mnist.train.images, mnist.train.labels)
-    # print(nn(mnist.train.images[0:4]))
+
+    nn.train(mnist.train.images, mnist.train.labels)
+    print(nn(mnist.train.images[0:4]))
