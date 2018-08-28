@@ -3,7 +3,6 @@ import numpy as np
 from skimage.io import imshow
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
-import pickle
 
 """
 Run tensorboard:
@@ -11,185 +10,71 @@ for Linux: tensorboard --logdir=path/to/log-directory
 for Windows: python -m tensorboard.main
 """
 
-"""
-TO DO
-1. Fix save method - it doesn't work
-2. Add changing learn rate in each step using parabola loss estimating
-3. Fix train method
-"""
 
-# Easy way to create structures like in the MatLab
 class Structure(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
 
-class Model:
+# Not now
+class System:
     """
-    The main class of all models. Everything is model
+    The main class of all models.
     """
-    def __init__(self, name='Noname', path='./results/'):
-        """
-        :param name: Name of the model. It is using for creating folder with saved model.
-        :param path: Path for saved models and data
-        """
-        self._config = Structure()
-        self._config.graph = Structure()
-        self._config.save_info = Structure()
-
-        self._config.num_inputs = 0
-        self._config.num_outputs = 0
-        self._config.learn_rate = 0.001
-        self._config.epochs = 1000
-        self._config.batch_size = 1
-        self._config.name = name
-
-        self._config.graph.graph_model = tf.Graph()
-        self._config.graph.input = None
-        self._config.graph.output = None
-        self._config.graph.model = None
-        self._config.graph.optimizer = None
-        self._config.graph.loss = 0
-        self._config.graph.train_alg = tf.train.GradientDescentOptimizer
-        self._config.graph.loss_fun = tf.losses.mean_squared_error
-        self._config.graph.trainable = True
-
-        self._config.save_info.path = path
-        self._config.save_info.tf = path + name + '/tf/{}'.format(name + '.ckpt')
-        self._config.save_info.tb = path + name + '/tb/'
-        self._config.save_info.model = None  # Save this object
-
-    def __add__(self, other):
-        """Add one model to another. Models are parallel."""
-
-    def __mul__(self, other):
-        """Multiple one Model to another. Models located each other."""
-
-    def __str__(self): pass
-
-    def __call__(self, input_data):
-        with tf.Session(graph=self._config.graph.graph_model) as sess:
-            # load previous session
-            saver = tf.train.Saver()
-            saver.restore(sess, self._config.save_info.tf)
-            data_len = len(input_data)
-            result = np.zeros((data_len, self._config.num_outputs))
-            for i in range(data_len):
-                inp = input_data[i, :].reshape((1, self._config.num_inputs))
-                result[i] = sess.run(self._config.graph.model,
-                                     feed_dict={self._config.graph.input: inp})
-            return result
-
-    def train(self, input_data, target_data):
-        with tf.Session(graph=self._config.graph.graph_model) as sess:
-            # Load previous session
-            saver = tf.train.Saver()
-            saver.restore(sess, self._config.save_info.tf)
-            # Parameters initializing
-            sess.run(tf.global_variables_initializer())
-            data_len = input_data.shape[0]
-            loss = 0
-
-            for e in range(self._config.epochs):
-                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                # !!! Add changing learn rate in each step using parabola loss estimating!!!
-                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                for b in range(data_len // self._config.batch_size):
-                    inp = input_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
-                    tar = target_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
-
-                    _, loss = sess.run([self._config.graph.optimizer, self._config.graph.loss],
-                                       feed_dict={self._config.graph.input: inp,
-                                                  self._config.graph.output: tar})
-                print('Epoch = {}, cost = {}'.format(e, loss))
-
-            # Save results
-            saver.save(sess, self._config.save_info.tf)
-
-    def save(self):
-        with open('{}.pkl'.format(self._config.save_info.path + self._config.name), 'wb') as output:
-            pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
-
-    def load(self, path_with_name):
-        with open(path_with_name, 'rb') as input:
-            model = pickle.load(input)
-        return model
-
-    def set_epochs(self, epochs): self._config.epochs = epochs
-
-    def set_learning_rate(self, learn_rate): self._config.learn_rate = learn_rate
-
-    def set_name(self, name):
-        self._config.name = name
-        self._config.save_info.tf = self._config.save_info.path + name + '/tf/{}'.format(name + '.ckpt')
-        self._config.save_info.tb = self._config.save_info.path + name + '/tb/'
-
-    def set_path(self, path):
-        self._config.save_info.path = path
-        self._config.save_info.tf = path + self._config.name + '/tf/{}'.format(self._config.name + '.ckpt')
-        self._config.save_info.tb = path + self._config.name + '/tb/'
-
-    def set_train_algorithm(self, algorithm): self._config.graph.train_alg = algorithm
-
-    def set_loss_function(self, function): self._config.graph.loss_fun = function
-
-    def set_num_inputs(self, num_inputs): self._config.num_inputs = num_inputs
-
-    def set_num_outputs(self, num_outputs): self._config.num_outputs = num_outputs
-
-    def set_batch_size(self, batch_size): self._config.batch_size = batch_size
-
-    def get_epochs(self): return self._config.epochs
-
-    def get_learning_rate(self): return self._config.learn_rate
-
-    def get_name(self): return self._config.name
-
-    def get_path(self): return self._config.save_info.path
-
-    def get_train_algorithm(self): return self._config.graph.train_alg
-
-    def get_loss_function(self): return self._config.graph.loss_fun
-
-    def get_num_inputs(self): return self._config.num_inputs
-
-    def get_num_outputs(self): return self._config.num_outputs
-
-    def get_batch_size(self): return self._config.batch_size
-
-    def get_config(self): return self._config
-
-
-class System(Model):
     """
-    Connections between more than one model are system. Two and more systems can connect in the big system.
-    """
-    def __init__(self, input_namespace, output_namespace, name='System_0', path='./results/'):
-        """
+    def __init__(self, input_namespace, output_namespace,
+                 name='System_0', adjacency_matrix=None, **models):
+
         Initialization
         :param name: Name of the model
         :param input_namespace: Dictionary of inputs with initial values
         :param output_namespace: Dictionary of outputs
         :param adjacency_matrix: Matrix with connection information of all nodes
-        """
-        super().__init__(name=name, path=path)
-        self._config.input_namespace = input_namespace
-        self._config.output_namespace = output_namespace
+
+        self._name = name
+        self._input_namespace = input_namespace
+        self._output_namespace = output_namespace
+        self._adjacency_matrix = adjacency_matrix
+        self._system_model = self._compile_system()
+    """
+
+    def __add__(self, other):
+        """Add one system to another. Systems are parallel."""
+
+    def __mul__(self, other):
+        """Multiple one system to another. System located each other."""
+
+    def __str__(self): pass
 
     def add_model(self): pass
 
     def get_model(self): pass
 
-    def set_input_namespace(self, new_input_namespace): self._config.input_namespace = new_input_namespace
+    def set_input_namespace(self, new_input_namespace): self._input_namespace = new_input_namespace
 
-    def set_output_namespace(self, new_output_namespace): self._config.output_namespace = new_output_namespace
+    def set_output_namespace(self, new_output_namespace): self._output_namespace = new_output_namespace
 
-    def get_input_namespace(self): return self._config.input_namespace
+    def set_name(self, new_name): self._name = new_name
 
-    def get_output_namespace(self): return self._config.output_namespace
+    def set_adjacency_matrix(self, adjacency_matrix): self._adjacency_matrix = adjacency_matrix
+
+    def get_input_namespace(self): return self._input_namespace
+
+    def get_output_namespace(self): return self._output_namespace
+
+    def get_name(self): return self._name
+
+    def get_adjacency_matrix(self): return self._adjacency_matrix
 
 
-class FNN(Model):
+# Not now
+class Model(System):
+    """
+    The system with only one object.
+    """
+
+
+class FNN:
     """
     Feedforward neural network class model.
     """
@@ -241,16 +126,30 @@ class FNN(Model):
         :param name: Name of the model. It is using for creating folder with saved model.
         :param path: Path for saved models and data
         """
-        super().__init__(name=name, path=path)
-        self._config.num_inputs = structure[0]
-        self._config.num_outputs = structure[-1]
+        self._config = Structure()
+        self._config.graph = Structure()
+        self._config.save_info = Structure()
+
         self._config.structure = structure
         self._config.act_funs = act_funs
+        self._config.learn_rate = learn_rate
+        self._config.epochs = epochs
+        self._config.name = name
 
-        self.set_train_algorithm(train_alg)
-        self.set_loss_function(loss_fun)
-        self.set_learning_rate(learn_rate)
-        self.set_epochs(epochs)
+        self._config.graph.graph_model = tf.Graph()
+        self._config.graph.input = None
+        self._config.graph.output = None
+        self._config.graph.model = None
+        self._config.graph.optimizer = None
+        self._config.graph.loss = 0
+        self._config.graph.train_alg = train_alg
+        self._config.graph.loss_fun = loss_fun
+
+        # self._config.save_info.saver = tf.train.Saver()
+        self._config.save_info.path = path
+        self._config.save_info.tf = path + name + '/tf/{}'.format(name + '.ckpt')
+        self._config.save_info.tb = path + name + '/tb/'
+        self._config.save_info.model = None  # Save this object
 
         self._config.update(self._graph_creation(self._config))
 
@@ -261,38 +160,64 @@ class FNN(Model):
         :return: Config with added models
         """
         # Saving everything is this graph
-        # config.graph.graph_model.as_default()
-        with tf.Session(graph=config.graph.graph_model) as sess:
-            # Input placeholders
-            config.graph.input = tf.placeholder(tf.float32, [None, config.structure[0]], 'input')
-            config.graph.output = tf.placeholder(tf.float32, [None, config.structure[-1]], 'output')
+        config.graph.graph_model.as_default()
+        # Input placeholders
+        config.graph.input = tf.placeholder(tf.float32, [None, config.structure[0]], 'input')
+        config.graph.output = tf.placeholder(tf.float32, [None, config.structure[-1]], 'output')
 
-            # Creating layers
-            model = None
-            for i in range(len(config.structure)-1):
-                with tf.name_scope('layer_{}'.format(i+1)):
-                    weights = tf.Variable(tf.random_uniform([config.structure[i], config.structure[i+1]],
-                                                            dtype=tf.float32),
-                                          name='weights_{}'.format(i+1))
-                    biases = tf.Variable(tf.random_uniform([config.structure[i+1]], dtype=tf.float32),
-                                         name='biases_{}'.format(i+1))
-                    # For first layer input is input placeholder
-                    if i == 0: model = config.graph.input
-                    model = config.act_funs[i](tf.add(tf.matmul(model, weights), biases))
-            config.graph.model = model
+        # Creating layers
+        model = None
+        for i in range(len(config.structure)-1):
+            with tf.name_scope('layer_{}'.format(i+1)):
+                weights = tf.Variable(tf.random_uniform([config.structure[i], config.structure[i+1]], dtype=tf.float32),
+                                      name='weights_{}'.format(i+1))
+                biases = tf.Variable(tf.random_uniform([config.structure[i+1]], dtype=tf.float32),
+                                     name='biases_{}'.format(i+1))
+                # For first layer input is input placeholder
+                if i == 0: model = config.graph.input
+                model = config.act_funs[i](tf.add(tf.matmul(model, weights), biases))
+        config.graph.model = model
 
-            # Cost function
-            config.graph.loss = config.graph.loss_fun(config.graph.output, config.graph.model)
-            config.graph.optimizer = config.graph.train_alg(config.learn_rate).minimize(config.graph.loss)
+        # Cost function
+        config.graph.loss = config.graph.loss_fun(config.graph.output, config.graph.model)
+        config.graph.optimizer = config.graph.train_alg(config.learn_rate).minimize(config.graph.loss)
 
-            # Save graph session for further using
-            sess.run(tf.global_variables_initializer())
-            tf.train.Saver().save(sess, config.save_info.tf)
-
-            # Save graph for tensorboard visualization
+        # Save graph for tensorboard visualization
+        with tf.Session(graph=config.graph.graph_model):
             tf.summary.FileWriter(config.save_info.tb, graph=config.graph.graph_model)
 
         return config
+
+    def train(self, input_data, target_data):
+        with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
+            data_len = len(input_data)
+            input_data = input_data.reshape((data_len, self._config.structure[0]))
+            target_data = target_data.reshape((data_len, self._config.structure[-1]))
+            for e in range(self._config.epochs):
+                _, loss = sess.run([self._config.graph.optimizer, self._config.graph.loss],
+                                   feed_dict={self._config.graph.input: input_data,
+                                              self._config.graph.output: target_data})
+                print('Epoch = {}, cost = {}'.format(e, loss))
+            # Save file
+            saver = tf.train.Saver()
+            saver.save(sess, self._config.save_info.tf)
+
+    def __call__(self, input_data):
+        with tf.Session() as sess:
+            # load previous session
+            saver = tf.train.Saver()
+            saver.restore(sess, self._config.save_info.tf)
+            data_len = len(input_data)
+            result = np.zeros((data_len, self._config.structure[-1]))
+            input_data = input_data.reshape((data_len, self._config.structure[0]))
+            for i in range(data_len):
+                inputs = input_data[i, :].reshape((1, self._config.structure[0]))
+                result[i] = sess.run(self._config.graph.model,
+                                     feed_dict={self._config.graph.input: inputs})
+            return result
+
+    def get_config(self): return self._config
 
 
 class RNN:
@@ -385,20 +310,34 @@ class CNN(Model):
         :param name: Name of the model. It is using for creating folder with saved model.
         :param path: Path for saved models and data
         """
-        super().__init__(name=name, path=path)
+        self._config = Structure()
+        self._config.graph = Structure()
+        self._config.save_info = Structure()
+
         self._config.image_size = image_size
         self._config.depth_lays = [image_size[2]] + depth_lays
         self._config.full_con_size = full_con_size
         self._config.window_size = window_size
         self._config.pull_size = pull_size
+        self._config.batch_size = batch_size
+        self._config.learn_rate = learn_rate
+        self._config.epochs = epochs
+        self._config.name = name
 
-        self.set_num_inputs(np.prod(image_size))
-        self.set_num_outputs(full_con_size[-1])
-        self.set_batch_size(batch_size)
-        self.set_learning_rate(learn_rate)
-        self.set_epochs(epochs)
-        self.set_loss_function(loss_fun)
-        self.set_train_algorithm(train_alg)
+        self._config.graph.graph_model = tf.Graph()
+        self._config.graph.input = None
+        self._config.graph.output = None
+        self._config.graph.keep_prob = None
+        self._config.graph.model = None
+        self._config.graph.optimizer = None
+        self._config.graph.loss = 0
+        self._config.graph.train_alg = train_alg
+        self._config.graph.loss_fun = loss_fun
+
+        self._config.save_info.path = path
+        self._config.save_info.tf = path + name + '/tf/{}'.format(name + '.ckpt')
+        self._config.save_info.tb = path + name + '/tb/'
+        self._config.save_info.model = None  # Save this object
 
         self._config.update(self._graph_creation(self._config))
 
@@ -470,27 +409,45 @@ class CNN(Model):
                 full_con = tf.nn.softmax(tf.add(full_con, biases))
         return full_con
 
-    def set_image_size(self, image_size):
-        self._config.image_size = image_size
-        self._config.depth_lays = [image_size[2]] + self._config.depth_lays
+    def train(self, input_data, target_data):
+        with tf.Session(graph=self._config.graph.graph_model) as sess:
+            # Load previous session
+            saver = tf.train.Saver()
+            saver.restore(sess, self._config.save_info.tf)
+            # Parameters initializing
+            sess.run(tf.global_variables_initializer())
+            data_len = input_data.shape[0]
+            loss = 0
 
-    def set_depth_lays(self, depth_lays): self._config.depth_lays = [self._config.image_size[2]] + depth_lays
+            for e in range(self._config.epochs):
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                # !!! Add changing learn rate in each step using parabola loss estimating!!!
+                # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                for b in range(data_len // self._config.batch_size):
+                    inp = input_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
+                    tar = target_data[b*self._config.batch_size:(b+1)*self._config.batch_size]
+                    _, loss = sess.run([self._config.graph.optimizer, self._config.graph.loss],
+                                       feed_dict={self._config.graph.input: inp,
+                                                  self._config.graph.output: tar})
+                print('Epoch = {}, cost = {}'.format(e, loss))
 
-    def set_full_con_size(self, full_con_size): self._config.full_con_size = full_con_size
+            # Save results
+            saver.save(sess, self._config.save_info.tf)
 
-    def set_window_size(self, window_size): self._config.window_size = window_size
+    def __call__(self, input_data):
+        with tf.Session(graph=self._config.graph.graph_model) as sess:
+            # load previous session
+            saver = tf.train.Saver()
+            saver.restore(sess, self._config.save_info.tf)
+            data_len = len(input_data)
+            result = np.zeros((data_len, self._config.full_con_size[-1]))
+            for i in range(data_len):
+                x = input_data.shape
+                inp = input_data[i, :].reshape((1, np.prod(self._config.image_size)))
+                result[i] = sess.run(self._config.graph.model,
+                                     feed_dict={self._config.graph.input: inp})
+            return result
 
-    def set_pull_size(self, pull_size): self._config.pull_size = pull_size
-
-    def get_image_size(self): return self._config.image_size
-
-    def get_depth_lays(self): return self._config.depth_lays[1:]
-
-    def get_full_con_size(self): return self._config.full_con_size
-
-    def get_window_size(self): return self._config.window_size
-
-    def get_pull_size(self): return self._config.pull_size
 
 
 class BNN(Model):
@@ -506,25 +463,24 @@ class FuzzyLogic(Model):
 
 if __name__ == '__main__':
     print("Let's test")
-    Data_JC = np.genfromtxt('../data/Data_JetCat_P60.csv', delimiter=',')
-    steps = 1000
-    fuel = Data_JC[0:-1:steps, 1] / 4.0
-    freq = Data_JC[0:-1:steps, 2] / 200000.0
-    temp = Data_JC[0:-1:steps, 3] / 1000.0
+    # Data_JC = np.genfromtxt('../data/Data_JetCat_P60.csv', delimiter=',')
+    # steps = 1000
+    # fuel = Data_JC[0:-1:steps, 1] / 4.0
+    # freq = Data_JC[0:-1:steps, 2] / 200000.0
+    # temp = Data_JC[0:-1:steps, 3] / 1000.0
 
-    nn = FNN(structure=(1, 5, 1), learn_rate=0.01, epochs=100)
-    nn.train(fuel, freq)
-    # nn.save()
-    res = nn(fuel)
-    plt.plot(res)
-    plt.plot(freq)
-    plt.show()
+    # nn = FNN(structure=(1, 100000, 1), learn_rate=0.0001, epochs=1000000)
+    # nn.train(fuel, freq)
+    # res = nn(fuel)
+    # plt.plot(res)
+    # plt.plot(freq)
+    # plt.show()
 
-    # nn = CNN(image_size=[28, 28, 1], depth_lays=[2, 4], batch_size=1000,
-    #          full_con_size=[100, 10], window_size=[5, 5], pull_size=2)
+    nn = CNN(image_size=[28, 28, 1], depth_lays=[2, 4], batch_size=1000,
+             full_con_size=[100, 10], window_size=[5, 5], pull_size=2)
 
-    # mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-    # print(mnist.train.images.shape, mnist.train.labels.shape)
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    print(mnist.train.images.shape, mnist.train.labels.shape)
     """
     left = 2.5
     top = 2.5
@@ -541,4 +497,4 @@ if __name__ == '__main__':
     plt.show()
     """
     # nn.train(mnist.train.images, mnist.train.labels)
-    # print(nn(mnist.train.images[0:4]))
+    print(nn(mnist.train.images[0:4]))
