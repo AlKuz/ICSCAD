@@ -1,72 +1,38 @@
+"""
+Old file. It should be rewriten.
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
-from skimage.io import imshow
 import tensorflow as tf
+
+from tensorflow.keras import layers, Input
+
 from tensorflow.examples.tutorials.mnist import input_data
-import pickle
 
-"""
-Run tensorboard:
-for Linux: tensorboard --logdir=path/to/log-directory
-for Windows: python -m tensorboard.main
-"""
-
-"""
-TO DO
-1. Fix save method - it doesn't work
-2. Add changing learn rate in each step using parabola loss estimating
-+3. Fix train method // Fixed, but training is better only with batch_size == 1
-4. Add dirrectory autocreating
-"""
 
 # Easy way to create structures like in the MatLab
 class Structure(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
-
+"""
 class Model:
-    """
-    The main class of all models. Everything is model
-    """
-    def __init__(self, name='Noname', path='./results/'):
-        """
-        :param name: Name of the model. It is using for creating folder with saved model.
-        :param path: Path for saved models and data
-        """
-        self._config = Structure()
-        self._config.graph = Structure()
-        self._config.save_info = Structure()
 
-        self._config.num_inputs = 0
-        self._config.num_outputs = 0
-        self._config.learn_rate = 0.001
-        self._config.epochs = 1000
-        self._config.batch_size = 1
-        self._config.name = name
+    The main class of all ml_models. Everything is model.
 
-        self._config.graph.graph_model = tf.Graph()
-        self._config.graph.input = None
-        self._config.graph.output = None
-        self._config.graph.model = None
-        self._config.graph.optimizer = None
-        self._config.graph.loss = 0
-        self._config.graph.train_alg = tf.train.GradientDescentOptimizer
-        self._config.graph.loss_fun = tf.losses.mean_squared_error
-        self._config.graph.trainable = True
+    def __init__(self):
 
-        self._config.save_info.path = path
-        self._config.save_info.tf = path + name + '/tf/{}'.format(name + '.ckpt')
-        self._config.save_info.tb = path + name + '/tb/'
-        self._config.save_info.model = None  # Save this object
+        self._model = None  # Here is one or many ml_models in dictionary
 
-    def __add__(self, other):
-        """Add one model to another. Models are parallel."""
+        self._info = Structure()
+        self._info.name = None
+        self._info.comments = None
 
-    def __mul__(self, other):
-        """Multiple one Model to another. Models located each other."""
+        self._structure = Structure()
 
-    def __str__(self): pass
+        self._structure.inputs = Structure()
+        self._structure.outputs = Structure()
 
     def __call__(self, input_data):
         with tf.Session(graph=self._config.graph.graph_model) as sess:
@@ -165,17 +131,17 @@ class Model:
 
 
 class System(Model):
-    """
+
     Connections between more than one model are system. Two and more systems can connect in the big system.
-    """
+
     def __init__(self, input_namespace, output_namespace, name='System_0', path='./results/'):
-        """
+
         Initialization
         :param name: Name of the model
         :param input_namespace: Dictionary of inputs with initial values
         :param output_namespace: Dictionary of outputs
         :param adjacency_matrix: Matrix with connection information of all nodes
-        """
+
         super().__init__(name=name, path=path)
         self._config.input_namespace = input_namespace
         self._config.output_namespace = output_namespace
@@ -194,9 +160,9 @@ class System(Model):
 
 
 class FNN(Model):
-    """
+
     Feedforward neural network class model.
-    """
+
     def __init__(self, structure=(1, 1, 1),
                  act_funs=(tf.sigmoid, tf.sigmoid),
                  loss_fun=tf.losses.mean_squared_error,
@@ -205,7 +171,7 @@ class FNN(Model):
                  epochs=1000,
                  name='FNN',
                  path='./results/'):
-        """
+
         :param structure: (2, 3, 1) - network structure with 2 input neurons,
             1 hidden layer with 3 neurons, and 1 output neuron.
         :param act_funs: list of activation functions. Possible activation functions:
@@ -243,8 +209,8 @@ class FNN(Model):
         :param learn_rate: Velocity of training.
         :param epochs: Number of training epochs.
         :param name: Name of the model. It is using for creating folder with saved model.
-        :param path: Path for saved models and data
-        """
+        :param path: Path for saved ml_models and data
+
         super().__init__(name=name, path=path)
         self._config.num_inputs = structure[0]
         self._config.num_outputs = structure[-1]
@@ -259,11 +225,11 @@ class FNN(Model):
         self._config.update(self._graph_creation(self._config))
 
     def _graph_creation(self, config):
-        """
+
         Helper for creating graph.
         :param config: Neural network configuration information
-        :return: Config with added models
-        """
+        :return: Config with added ml_models
+
         # Saving everything is this graph
         # config.graph.graph_model.as_default()
         with tf.Session(graph=config.graph.graph_model) as sess:
@@ -300,11 +266,11 @@ class FNN(Model):
 
 
 class RNN:
-    """
+
     Recurrent neural network class model.
-    """
+
     def __init__(self, structure, connections, names_in=None, names_out=None):
-        """
+
     structure = [2, 3, 1] - network structure with 2 input neurons, 1 hidden
         layer with 3 neurons, and 1 output neuron.
     connections = [in, hid, out] - connection between layers.
@@ -320,7 +286,7 @@ class RNN:
         :param connections:
         :param names_in:
         :param names_out:
-        """
+
         self.structure = structure
         self.connections = connections
         self.graph = tf.Graph()
@@ -339,9 +305,9 @@ class LSTM(Model):
 
 
 class CNN(Model):
-    """
+
     Convolution neural network class model.
-    """
+
     def __init__(self, image_size,
                  depth_lays,
                  full_con_size,
@@ -354,7 +320,7 @@ class CNN(Model):
                  train_alg=tf.train.AdamOptimizer,
                  name='CNN',
                  path='./results/'):
-        """
+
 
         :param image_size: [1024, 768, 3] - width, height, depth
         :param depth_lays: [6, 10] - depth in each conv layer
@@ -387,8 +353,8 @@ class CNN(Model):
             tf.train.ProximalAdagradOptimizer
             tf.train.RMSPropOptimizer
         :param name: Name of the model. It is using for creating folder with saved model.
-        :param path: Path for saved models and data
-        """
+        :param path: Path for saved ml_models and data
+
         super().__init__(name=name, path=path)
         self._config.image_size = image_size
         self._config.depth_lays = [image_size[2]] + depth_lays
@@ -407,11 +373,11 @@ class CNN(Model):
         self._config.update(self._graph_creation(self._config))
 
     def _graph_creation(self, config):
-        """
+
         Helper for creating graph.
         :param config: Neural network configuration information
-        :return: Config with added models
-        """
+        :return: Config with added ml_models
+
         # Saving everything in this graph
         # config.graph.graph_model.as_default()
         with tf.Session(graph=config.graph.graph_model) as sess:
@@ -498,24 +464,71 @@ class CNN(Model):
 
 
 class BNN(Model):
-    """
+
     Bayesian neural network class model.
-    """
     pass
 
 
 class FuzzyLogic(Model):
     pass
 
+"""
+
+
+class Model:
+    pass
+
+
+class CNN(Model):
+    def __init__(self,
+                 image_shape=(224, 224, 3),
+                 parallels=2,
+                 depths=(48, 128, 192, 192, 128),
+                 windows=(11, 5, 3, 3, 3),
+                 strides=(4, 1, 1, 1, 1),
+                 pools=(2, 2, 0, 0, 2),
+                 intersections=(0, 0, 1, 0, 0),
+                 denses=(2048, 2048, 1000)):
+
+        self._structure = Structure()
+        self._structure.image_shape = image_shape
+        self._structure.parallels = parallels
+        self._structure.depths = depths
+        self._structure.windows = windows
+        self._structure.strides = strides
+        self._structure.pools = pools
+        self._structure.intersections = intersections
+
+        model = [Input(shape=image_shape)] * parallels
+        for layer_num in range(len(depths)):
+            depth = depths[layer_num]
+            window = windows[layer_num]
+            strise = strides[layer_num]
+            pool = pools[layer_num]
+            intersection = intersections[layer_num]
+
+        model = [layers.Conv2D(filters=10, kernel_size=3, strides=1, padding='same', activation='relu')(x) for x in
+                 model]
+
+        self._model = model
+        self._model.summary()
+
+    def _construct_model(self):
+
+
+
+        return tf.keras.models.Model(input_tensor, model)
+
 
 if __name__ == '__main__':
     print("Let's test")
+    """
     Data_JC = np.genfromtxt('../data/Data_JetCat_P60.csv', delimiter=',')
     steps = 100
     fuel = Data_JC[0:-1:steps, 1] / 4.0
     freq = Data_JC[0:-1:steps, 2] / 200000.0
     temp = Data_JC[0:-1:steps, 3] / 1000.0
-    """
+
     nn = FNN(structure=(1, 5, 1), learn_rate=0.01, epochs=1000)
     nn.train(fuel, freq)
     nn.set_batch_size(10000)
@@ -525,7 +538,7 @@ if __name__ == '__main__':
     plt.plot(res)
     plt.plot(freq)
     plt.show()
-    """
+
     nn = CNN(image_size=[28, 28, 1], depth_lays=[2, 4], batch_size=1000,
              full_con_size=[100, 10], window_size=[5, 5], pull_size=2)
 
@@ -548,3 +561,5 @@ if __name__ == '__main__':
 
     nn.train(mnist.train.images, mnist.train.labels)
     print(nn(mnist.train.images[0:4]))
+    """
+    cnn = CNN(image_shape=(224, 224, 3))

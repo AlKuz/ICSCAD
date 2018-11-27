@@ -1,3 +1,7 @@
+"""
+Old file
+"""
+
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -228,7 +232,7 @@ class RNN:
         self.cost_fun = tf.reduce_mean(-1 * (self.net_out * tf.log(self.model) + (1 - self.net_out) * tf.log(1 - self.model)))
         self.optimizer = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(self.cost_fun)
         # The file path to save the data
-        self.save_file = './models/rnn.ckpt'
+        self.save_file = './ml_models/rnn.ckpt'
         # Class used to do the saving
         self.saver = tf.train.Saver()
 

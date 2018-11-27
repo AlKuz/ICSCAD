@@ -1,4 +1,4 @@
-# ICSCAD
+# ICSCreator
 Framework for creating intelligent control systems.
 
 Need imports:
