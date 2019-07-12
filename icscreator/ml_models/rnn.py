@@ -60,6 +60,16 @@ class NeuralNetwork(object):
 
             return hidden
 
+    def _delayed(self, tensor: tf.Tensor, num_delays: int, name='delays'):
+        assert len(tensor.shape) == 1
+        num_inputs = int(tensor.shape[0])
+
+        with tf.name_scope(name):
+            delays = tf.Variable(tf.zeros([num_inputs * (num_delays + 1)]), trainable=False, name='tensor_delays')
+            concatenated = tf.concat([tensor, delays[:-num_inputs]], axis=0)
+            delays = tf.assign(delays, concatenated)
+        return delays
+
     @abstractmethod
     def _create_model(self):
         pass
@@ -86,6 +96,7 @@ class ElmanNetwork(NeuralNetwork):
             hiddens = self._layer(tf.concat([self._model_inputs, state], axis=0), self._hiddens, name='hidden')
             hiddens = tf.assign(state, hiddens)
             self._model_outputs = self._layer(hiddens, self._outputs, name='output')
+            self._model_outputs = self._delayed(self._model_outputs, 5)
 
             writer = tf.summary.FileWriter('tb', tf.get_default_graph())
 
