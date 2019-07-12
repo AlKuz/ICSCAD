@@ -41,6 +41,25 @@ class NeuralNetwork(object):
 
         return result
 
+    def _lstm(self, tensor, num_outputs: int, name='lstm'):
+        with tf.name_scope(name):
+            state = tf.Variable(tf.zeros([num_outputs]), trainable=False, name='state')
+            hidden = tf.Variable(tf.zeros([num_outputs]), trainable=False, name='hidden')
+
+            inputs = tf.concat([hidden, tensor], axis=0)
+
+            forget_gate = self._layer(inputs, num_outputs, name='forget_gate')
+            input_gate = self._layer(inputs, num_outputs, name='input_gate')
+            candidate_gate = self._layer(inputs, num_outputs, activation=tf.tanh, name='candidate_gate')
+
+            state = tf.assign(state, forget_gate * state + input_gate * candidate_gate)
+
+            output_gate = self._layer(inputs, num_outputs, name='output_gate')
+
+            hidden = tf.assign(hidden, output_gate * tf.tanh(state))
+
+            return hidden
+
     @abstractmethod
     def _create_model(self):
         pass
