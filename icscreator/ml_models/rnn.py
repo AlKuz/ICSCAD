@@ -4,21 +4,46 @@ Recurrent neural networks:
 ElmanNetwork
 """
 import tensorflow as tf
+from abc import abstractmethod
 
 
 class NeuralNetwork(object):
     """Base class of neural networks"""
 
     def __init__(self, seed=None):
+        """
+        Initialization of base network class
+
+        Args:
+            seed (int): Seed for the random generator to create network weights
+        """
         self._seed = seed
 
-    def _layer(self, tensor: tf.Tensor, num_outputs, activation=tf.sigmoid, name='layer'):
-        num_inputs = int(tensor.shape[1])
+    def _layer(self, tensor: tf.Tensor, num_outputs: int, activation=tf.sigmoid, name='layer'):
+        """
+        Full connected layer
+
+        Args:
+            tensor (tf.Tensor): Input tensor in the layer
+            num_outputs (int): Number of output neurons in the layer
+            activation (func): Activation function of the layer. Initially it is a sigmoid
+            name (str): Name of the layer
+
+        Return (tf.Tensor): Output tensor of the layer
+        """
+        assert len(tensor.shape) == 1
+        num_inputs = int(tensor.shape[0])
+
         with tf.name_scope(name):
             biases = tf.Variable(tf.random.uniform([num_outputs], -1, 1, seed=self._seed, name='biases'))
-            weights = tf.Variable(tf.random.uniform([num_inputs, num_outputs], -1, 1, seed=self._seed, name='weights'))
-            result = activation(tf.matmul(tensor, weights) + biases)
+            weights = tf.Variable(tf.random.uniform([num_outputs, num_inputs], -1, 1, seed=self._seed, name='weights'))
+            result = activation(tf.linalg.matvec(weights, tensor) + biases)
+
         return result
+
+    @abstractmethod
+    def _create_model(self):
+        pass
 
 
 class ElmanNetwork(NeuralNetwork):
@@ -36,10 +61,10 @@ class ElmanNetwork(NeuralNetwork):
 
     def _create_model(self):
         with self._graph.as_default():
-            self._model_inputs = tf.compat.v1.placeholder(tf.float32, [1, self._inputs], 'inputs')
-            state = tf.Variable(tf.zeros([1, self._hiddens]), trainable=False, name='state')
+            self._model_inputs = tf.compat.v1.placeholder(tf.float32, [self._inputs], 'inputs')
+            state = tf.Variable(tf.zeros([self._hiddens]), trainable=False, name='state')
 
-            hiddens = self._layer(tf.concat([self._model_inputs, state], axis=1), self._hiddens, name='hidden')
+            hiddens = self._layer(tf.concat([self._model_inputs, state], axis=0), self._hiddens, name='hidden')
             hiddens = tf.assign(state, hiddens)
             self._model_outputs = self._layer(hiddens, self._outputs, name='output')
 
@@ -50,7 +75,7 @@ class ElmanNetwork(NeuralNetwork):
         with tf.Session(graph=self._graph) as sess:
             sess.run(tf.initialize_all_variables())
             for i in data:
-                r = sess.run(self._model_outputs, feed_dict={self._model_inputs: [i]})
+                r = sess.run(self._model_outputs, feed_dict={self._model_inputs: i})
                 result.append(list(r))
         return result
 
