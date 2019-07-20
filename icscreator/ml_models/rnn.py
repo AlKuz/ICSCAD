@@ -215,6 +215,37 @@ class NeuralNetwork(object):
 
 
 if __name__ == "__main__":
+    class ElmanNetwork(NeuralNetwork):
+        """Elman network"""
+
+        def __init__(self, inputs: int, hiddens: int, outputs: int, seed=None):
+            self._inputs = inputs
+            self._hiddens = hiddens
+            self._outputs = outputs
+            Layer.seed = seed
+            super().__init__()
+
+        def _create_model(self):
+            self._model_inputs = Layer.input(self._inputs)
+            state = Layer.state(self._hiddens)
+            hiddens = Layer.dense(tf.concat([self._model_inputs, state], axis=0), self._hiddens, name='hidden')
+            hiddens = Layer.assign(target=state, value=hiddens)
+            self._model_outputs = Layer.dense(hiddens, self._outputs, name='output')
+
+        @property
+        def hiddens(self):
+            return self._hiddens
+
+        @property
+        def inputs(self):
+            return self._inputs
+
+        @property
+        def outputs(self):
+            return self._outputs
+
     data = [[1, 2, 3]] * 10
-    model = ElmanNetwork(3, 10, 2, seed=13)
-    print(model.predict(data))
+    model1 = ElmanNetwork(3, 10, 2, seed=13)
+    model2 = ElmanNetwork(3, 10, 1, seed=13)
+    print(model1.predict(data[:2]))
+    print(model2.predict(data[:2]))
