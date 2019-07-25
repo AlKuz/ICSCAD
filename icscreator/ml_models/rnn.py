@@ -7,6 +7,7 @@ import numpy as np
 import os
 import tensorflow as tf
 from abc import abstractmethod
+import tqdm
 
 
 class Layer(object):
@@ -153,7 +154,7 @@ class NeuralNetwork(object):
 
         assert isinstance(self._model_inputs, tf.Tensor)
         assert isinstance(self._model_outputs, tf.Tensor)
-        self._model_targets = Layer.input(self._model_outputs.shape[1], name='targets')
+        self._model_targets = Layer.input(self._model_outputs.shape[0], name='targets')
 
         self._model_loss = loss(self._model_targets, self._model_outputs)
         self._model_optimizer = optimizer(**optimizer_settings).minimize(self._model_loss)
@@ -207,8 +208,27 @@ class NeuralNetwork(object):
     def optimize(self, error: float):
         pass
 
-    def train(self, input_data: list, target_data: list):
-        pass
+    def train(self, input_data: list, target_data: list, epochs=1000, early_stop=10):
+        counter = 0
+        for i in range(epochs):
+            with tqdm.tqdm(range(len(input_data))) as tqdm_generator:
+                for d in tqdm_generator:
+                    loss, _ = self._session.run([self._model_loss, self._model_optimizer], feed_dict={
+                        self._model_targets: target_data[d],
+                        self._model_inputs: input_data[d]
+                    })
+                    tqdm_generator.set_description(desc='Epoch {}, loss={:.4f}'.format(i+1, loss))
+                try:
+                    if loss < min_loss:
+                        min_loss = loss
+                        counter = 0
+                    else:
+                        counter += 1
+                except NameError:
+                    min_loss = loss
+
+                if counter == early_stop:
+                    break
 
     def save(self, path: str, only_model=False):
         pass
@@ -244,8 +264,7 @@ if __name__ == "__main__":
         def outputs(self):
             return self._outputs
 
-    data = [[1, 2, 3]] * 10
+    data = [[1, 2, 3]] * 100
+    target = [[0.1, 0.7]] * 100
     model1 = ElmanNetwork(3, 10, 2, seed=13)
-    model2 = ElmanNetwork(3, 10, 1, seed=13)
-    print(model1.predict(data[:2]))
-    print(model2.predict(data[:2]))
+    model1.train(data, target)
