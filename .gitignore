@@ -1,8 +1,2 @@
-
-\.idea/
-
-icscad/results/
-
-icscad/MNIST_data/
-
-results/
+/.idea/
+/static/
