@@ -116,46 +116,58 @@ class NeuralNetwork(object):
         self._session.as_default()
         if model_name is None:
             model_name = self._name
-        model = tf.keras.models.Model(self._model_inputs, self._model_outputs)
-        model.save(os.path.join(folder, model_name, 'model.hdf5'), include_optimizer=False)
+
+        path = os.path.join(folder, model_name)
+        if not os.path.exists(path):
+            os.makedirs(path)
+
+        tf.train.Saver().save(self._session, os.path.join(path, 'model.ckpt'))
 
         object_fields = {k: v for k, v in self.__dict__.items() if k not in
-                         ['_session', '_model_inputs', '_model_outputs', '_model_targets', '_model_loss',
+                         ['_session', '_saver', '_model_inputs', '_model_outputs', '_model_targets', '_model_loss',
                           '_model_optimizer']}
+        object_fields["input_name"] = self._model_inputs.name
+        object_fields["output_name"] = self._model_outputs.name
         with open(os.path.join(folder, model_name, 'info.json'), 'w') as file:
             json.dump(object_fields, file)
+
+    def load(self, folder: str):
+        if self._model_inputs is not None or self._model_outputs is not None:
+            print("Error: class contains model")
+            return None
+
+        with open(os.path.join(folder, 'info.json'), 'r') as file:
+            fields: dict = json.load(file)
+
+        self._session.as_default()
+        saver = tf.train.Saver()
+        saver.restore(self._session, os.path.join(folder, 'model.ckpt'))
+        self._model_inputs = self._session.graph.get_tensor_by_name(fields["input_name"])
+        self._model_outputs = self._session.graph.get_tensor_by_name(fields["output_name"])
+
+        del fields["input_name"]
+        del fields["output_name"]
+
+        for key, value in fields.items():
+            setattr(self, key, value)
 
     @property
     def session(self):
         return self._session
 
 
-def load(folder: str, model_name: str) -> NeuralNetwork:
-    with open(os.path.join(folder, model_name, 'info.json'), 'r') as file:
-        fields: dict = json.load(file)
-
-    model: tf.keras.models.Model = tf.keras.models.load_model(os.path.join(folder, model_name, 'model.hdf5'),
-                                                              compile=False)
-    fields['_model_inputs'] = model.input
-    fields['_model_outputs'] = model.output
-
-    neural_network = NeuralNetwork()
-    neural_network.session.as_default()
-    for key, value in fields.items():
-        setattr(neural_network, key, value)
-
-    return neural_network
-
-
 if __name__ == "__main__":
     from icscreator.prepared_models import ElmanNetwork
 
-    FOLDER = os.path.join(os.getcwd(), 'static', 'models')
+    FOLDER = '/home/alexander/Projects/ICSCreator/static/models'
 
     data = [[1, 2, 3]] * 100
     target = [[0.1, 0.7]] * 100
     model1 = ElmanNetwork(3, 10, 2, seed=13)
-    model1.train(data, target, folder=FOLDER)
     model1.compile()
+    model1.train(data, target, folder=FOLDER, epochs=5)
 
-    model2 = load(FOLDER, 'elman_network')
+    model2 = NeuralNetwork()
+    model2.load(os.path.join(FOLDER, 'elman_network'))
+    print(model1.predict(data))
+    print(model2.predict(data))
