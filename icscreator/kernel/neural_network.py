@@ -8,7 +8,7 @@ from abc import abstractmethod
 import tqdm
 import json
 
-from icscreator.kernel import Layer
+from icscreator.kernel import Layer, VisualTool
 
 
 class NeuralNetwork(object):
@@ -89,7 +89,7 @@ class NeuralNetwork(object):
         return loss_result
 
     def train(self, input_data: list, target_data: list, folder: str = None, name: str = None,
-              epochs=1000, early_stop=10):
+              epochs=1000, early_stop=10, vis_tool: VisualTool = None):
         counter = 0
         for i in range(epochs):
             with tqdm.tqdm(range(len(input_data))) as tqdm_generator:
