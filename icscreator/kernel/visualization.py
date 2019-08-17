@@ -31,6 +31,7 @@ class VisualTool(object):
         self._ratio = ratio
         self._show_loss = show_loss
 
+        plt.ion()
         self._rows, self._cols = self._get_tiles_ratio()
         self._fig = plt.figure()
         self._construct_tiles()
@@ -57,14 +58,12 @@ class VisualTool(object):
 
         self._param_axs = [plt.subplot2grid(gridsize, gc) for gc in grid_coords[:len(self._titles)]]
         self._add_markup_to_params()
-        plt.show()
 
     def _add_markup_to_loss(self):
         self._loss_ax.set_title("Losses")
         self._loss_ax.set_xlabel("Epochs")
         self._loss_ax.set_ylabel("Loss values")
         self._loss_ax.grid(True)
-        self._loss_ax.legend(self._titles, loc="upper left")
 
     def _add_markup_to_params(self):
         for i, ax in enumerate(self._param_axs):
@@ -72,21 +71,35 @@ class VisualTool(object):
             ax.set_xlabel(self._x_info[i])
             ax.set_ylabel(self._y_info[i])
             ax.grid(True)
-            ax.legend(self._legend)
+            ax.legend(self._legend, loc="upper left")
 
-    def draw(self, losses: List[float], data_to_draw: List[np.ndarray]):
-        assert len(data_to_draw) == len(self._legend)
-        for i in data_to_draw:
-            assert len(i.shape) == 2
-            assert i.shape[0] == len(self._titles)
+    def draw(self, data_to_draw: List[np.ndarray], losses: List[float] = None):
+        if self._show_loss and losses is not None:
+            try:
+                self._losses: np.ndarray = np.append(self._losses, np.array([losses]), axis=0)
+            except AttributeError:
+                self._losses = np.array([losses])
+            self._draw_ax(self._loss_ax, self._losses)
+            self._add_markup_to_loss()
+            plt.pause(0.0001)
 
-        for sbplt in self._axs:
-            pass
+        prepared_data = np.transpose(np.array(data_to_draw), axes=(2, 1, 0))
+        for i, ax in enumerate(self._param_axs):
+            self._draw_ax(ax, prepared_data[i, ...])
+        self._add_markup_to_params()
+
+    def _draw_ax(self, ax, data: np.ndarray):
+        ax.clear()
+        ax.plot(data)
+
+    def __del__(self):
+        plt.ioff()
+        plt.show()
 
 
 if __name__ == "__main__":
     num_param = 2
-    num_data = 10
+    num_data = 2
     ratio = 9 / 16
 
     titles = ["Param_{}".format(n) for n in range(num_param)]
@@ -97,10 +110,8 @@ if __name__ == "__main__":
     losses = [list(1 / np.random.uniform(0, 5, 100).cumsum()) for _ in range(num_data)]
 
     vis = VisualTool(titles, x_info, y_info, legend, ratio, show_loss=True)
-    rows, cols = vis._get_tiles_ratio()
-    print((rows, cols))
 
     for i in range(len(losses[0])):
         param_losses = [losses[n][i] for n in range(len(losses))]
-        data = [np.random.uniform(-100, 100, (100, num_param)) for _ in range(num_data)]
-
+        data = [np.random.uniform(-100, 100, (10000, num_param)) for _ in range(num_data)]
+        vis.draw(data, param_losses)
