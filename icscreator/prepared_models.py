@@ -6,12 +6,12 @@ from icscreator.kernel import Layer, NeuralNetwork
 class ElmanNetwork(NeuralNetwork):
     """Elman network"""
 
-    def __init__(self, inputs: int, hiddens: int, outputs: int, seed=None):
+    def __init__(self, inputs: int, hiddens: int, outputs: int, seed=None, name: str = None):
         self._inputs = inputs
         self._hiddens = hiddens
         self._outputs = outputs
         Layer.seed = seed
-        super().__init__(name='elman_network')
+        super().__init__(name='elman_network' if name is None else name)
 
     def _create_model(self):
         self._model_inputs = Layer.input(self._inputs)

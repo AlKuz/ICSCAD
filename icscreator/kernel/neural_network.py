@@ -9,6 +9,7 @@ import tqdm
 import json
 
 from icscreator.kernel import Layer
+from icscreator.kernel.visualization import VisualTool
 
 
 class NeuralNetwork(object):
@@ -54,7 +55,7 @@ class NeuralNetwork(object):
         """
         pass
 
-    def predict(self, data):
+    def predict(self, data: np.ndarray) -> np.ndarray:
         """
         Make prediction of neural network.
 
@@ -64,10 +65,13 @@ class NeuralNetwork(object):
         Returns (list): List of prediction results.
         """
         result = []
-        for i in data:
-            r = self._session.run(self._model_outputs, feed_dict={self._model_inputs: i})
+        for i in range(data.shape[0]):
+            r = self._session.run(self._model_outputs, feed_dict={self._model_inputs: data[i]})
             r = list(r) if len(r) > 1 else float(r)
             result.append(r)
+        result = np.array(result)
+        if len(result.shape) == 1:
+            result = np.expand_dims(result, axis=1)
         return result
 
     def evaluate(self, input_data: list, target_data: list) -> float:
@@ -88,26 +92,29 @@ class NeuralNetwork(object):
         loss_result = float(np.mean(loss_result))
         return loss_result
 
-    def train(self, input_data: list, target_data: list, folder: str = None, name: str = None,
-              epochs=1000, early_stop=10):
+    def train(self, input_data: np.ndarray, target_data: np.ndarray, folder: str = None, name: str = None,
+              epochs=1000, early_stop=10, vis_tool: VisualTool = None):
         counter = 0
         for i in range(epochs):
             with tqdm.tqdm(range(len(input_data))) as tqdm_generator:
                 for d in tqdm_generator:
-                    loss, _ = self._session.run([self._model_loss, self._model_optimizer], feed_dict={
-                        self._model_targets: target_data[d],
-                        self._model_inputs: input_data[d]
-                    })
-                    tqdm_generator.set_description(desc='Epoch {}, loss={:.4f}'.format(i+1, loss))
+                    loss, _ = self._session.run([self._model_loss, self._model_optimizer],
+                                                feed_dict={self._model_targets: target_data[d],
+                                                           self._model_inputs: input_data[d]})
+                    tqdm_generator.set_description(desc='Epoch {}, loss={:.8f}'.format(i+1, loss))
                 try:
-                    if loss < min_loss:
+                    if loss >= min_loss:
+                        counter += 1
+                    else:
                         min_loss = loss
                         counter = 0
                         self.save(folder, name)
-                    else:
-                        counter += 1
                 except NameError:
                     min_loss = loss
+
+                if vis_tool is not None:
+                    model_result = self.predict(input_data)
+                    vis_tool.draw([target_data, model_result], [loss])
 
                 if counter == early_stop:
                     break
@@ -121,7 +128,7 @@ class NeuralNetwork(object):
         if not os.path.exists(path):
             os.makedirs(path)
 
-        tf.train.Saver().save(self._session, os.path.join(path, 'model.ckpt'))
+        tf.compat.v1.train.Saver().save(self._session, os.path.join(path, 'model.ckpt'))
 
         object_fields = {k: v for k, v in self.__dict__.items() if k not in
                          ['_session', '_saver', '_model_inputs', '_model_outputs', '_model_targets', '_model_loss',
@@ -160,14 +167,22 @@ if __name__ == "__main__":
     from icscreator.prepared_models import ElmanNetwork
 
     FOLDER = '/home/alexander/Projects/ICSCreator/static/models'
+    DATA_PATH = "/home/alexander/Projects/ICSCreator/static/data/Data_JC.csv"
 
-    data = [[1, 2, 3]] * 100
-    target = [[0.1, 0.7]] * 100
-    model1 = ElmanNetwork(3, 10, 2, seed=13)
-    model1.compile()
-    model1.train(data, target, folder=FOLDER, epochs=5)
+    data_jc = np.genfromtxt(DATA_PATH, delimiter=',')
 
-    model2 = NeuralNetwork()
-    model2.load(os.path.join(FOLDER, 'elman_network'))
-    print(model1.predict(data))
-    print(model2.predict(data))
+    fuel = np.expand_dims(data_jc[1::100, 1], axis=-1) / 4.0
+    freq = np.expand_dims(data_jc[1::100, 2] / 200000.0, axis=1)
+    # temp = np.expand_dims(data_jc[1::100, 3] / 1000.0, axis=1)
+    # freq_temp = np.concatenate([freq, temp], axis=1)
+
+    vis_tool = VisualTool(titles=['Freq'],
+                          x_info=['Time'],
+                          y_info=['freq'],
+                          legend=['Target', 'Model'],
+                          ratio=9/16)
+
+    engine = ElmanNetwork(1, 20, 1, seed=13, name='engine')
+    engine.compile()
+    engine.train(fuel, freq, folder=FOLDER, epochs=1000, vis_tool=vis_tool, early_stop=100)
+
