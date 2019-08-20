@@ -69,7 +69,10 @@ class NeuralNetwork(object):
             r = self._session.run(self._model_outputs, feed_dict={self._model_inputs: data[i]})
             r = list(r) if len(r) > 1 else float(r)
             result.append(r)
-        return np.array(result)
+        result = np.array(result)
+        if len(result.shape) == 1:
+            result = np.expand_dims(result, axis=1)
+        return result
 
     def evaluate(self, input_data: list, target_data: list) -> float:
         """
@@ -98,7 +101,7 @@ class NeuralNetwork(object):
                     loss, _ = self._session.run([self._model_loss, self._model_optimizer],
                                                 feed_dict={self._model_targets: target_data[d],
                                                            self._model_inputs: input_data[d]})
-                    tqdm_generator.set_description(desc='Epoch {}, loss={:.4f}'.format(i+1, loss))
+                    tqdm_generator.set_description(desc='Epoch {}, loss={:.8f}'.format(i+1, loss))
                 try:
                     if loss >= min_loss:
                         counter += 1
@@ -164,21 +167,22 @@ if __name__ == "__main__":
     from icscreator.prepared_models import ElmanNetwork
 
     FOLDER = '/home/alexander/Projects/ICSCreator/static/models'
+    DATA_PATH = "/home/alexander/Projects/ICSCreator/static/data/Data_JC.csv"
 
-    data = np.array([[1, 2, 3]] * 100)
-    target = np.array([[0.1, 0.7]] * 100)
+    data_jc = np.genfromtxt(DATA_PATH, delimiter=',')
 
-    vis_tool = VisualTool(titles=['Fuel', 'Temperature'],
-                          x_info=['Time'] * 2,
-                          y_info=['fuel', 'temp'],
+    fuel = np.expand_dims(data_jc[1::100, 1], axis=-1) / 4.0
+    freq = np.expand_dims(data_jc[1::100, 2] / 200000.0, axis=1)
+    # temp = np.expand_dims(data_jc[1::100, 3] / 1000.0, axis=1)
+    # freq_temp = np.concatenate([freq, temp], axis=1)
+
+    vis_tool = VisualTool(titles=['Freq'],
+                          x_info=['Time'],
+                          y_info=['freq'],
                           legend=['Target', 'Model'],
                           ratio=9/16)
 
-    model1 = ElmanNetwork(3, 10, 2, seed=13)
-    model1.compile()
-    model1.train(data, target, folder=FOLDER, epochs=1000, vis_tool=vis_tool)
+    engine = ElmanNetwork(1, 20, 1, seed=13, name='engine')
+    engine.compile()
+    engine.train(fuel, freq, folder=FOLDER, epochs=1000, vis_tool=vis_tool, early_stop=100)
 
-    model2 = NeuralNetwork()
-    model2.load(os.path.join(FOLDER, 'elman_network'))
-    print(model1.predict(data))
-    print(model2.predict(data))

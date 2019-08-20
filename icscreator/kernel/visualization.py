@@ -79,7 +79,7 @@ class VisualTool(object):
                 self._losses: np.ndarray = np.append(self._losses, np.array([losses]), axis=0)
             except AttributeError:
                 self._losses = np.array([losses])
-            self._draw_ax(self._loss_ax, self._losses)
+            self._draw_ax(self._loss_ax, self._losses, graph_type='log')
             self._add_markup_to_loss()
             plt.pause(0.0001)
 
@@ -88,9 +88,12 @@ class VisualTool(object):
             self._draw_ax(ax, prepared_data[i, ...])
         self._add_markup_to_params()
 
-    def _draw_ax(self, ax, data: np.ndarray):
+    def _draw_ax(self, ax, data: np.ndarray, graph_type='plot'):
         ax.clear()
-        ax.plot(data)
+        if graph_type == 'plot':
+            ax.plot(data)
+        elif graph_type == 'log':
+            ax.semilogy(data)
 
     def __del__(self):
         plt.ioff()
