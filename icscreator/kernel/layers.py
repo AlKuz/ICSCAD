@@ -1,4 +1,4 @@
-"""Neural network layer class"""
+"""Neural network layer classes (only for online models)"""
 
 import tensorflow as tf
 from typing import List
@@ -23,9 +23,17 @@ class Layer(object):
         'linear': lambda x: x
     }
 
-    def __init__(self, shape: tuple, name: str):
+    def __init__(self, shape: tuple, name: str, activation: str = 'sigmoid'):
+        """
+
+        Args:
+            shape (tuple): Output layer shape
+            name (str): Name of the layer
+            activation (str): Activation function of the layer. Initially it is a sigmoid
+        """
         self._shape = shape
         self._name = name
+        self._activation = self._activations[activation]
 
     @abstractmethod
     def __call__(self, *args, **kwargs) -> tf.Tensor:
@@ -43,21 +51,19 @@ class Layer(object):
 class Input(Layer):
     """Input layer"""
 
-    def __init__(self, shape: tuple, name: str = 'input', include_batch=False):
+    def __init__(self, shape: tuple, name: str = 'input', activation: str = 'linear'):
         """
         Input layer initialization
 
         Args:
             shape (tuple): Shape of input neurons in the layer
             name (str): Name of the layer
-            include_batch (bool): If True then batch size included in the shape, else batch dimension is None
+            activation (str): Layer activation. Linear in the default
         """
-        if not include_batch:
-            shape = (None,) + shape
-        super().__init__(shape, name)
+        super().__init__(shape, name, activation)
 
     def __call__(self) -> tf.Tensor:
-        return tf.compat.v1.placeholder(tf.float32, self._shape, self._name)
+        return self._activation(tf.compat.v1.placeholder(tf.float32, self._shape, self._name))
 
 
 class Dense(Layer):
@@ -67,20 +73,13 @@ class Dense(Layer):
         """
         Dense layer initialization.
 
-        Cases:
-            Dense(shape=(6,))(tf.placeholder((None, 3, 4, 5))) -> (None, 3, 4, 6)
-            Dense(shape=(6, 7))(tf.placeholder((None, 3, 4, 5))) -> (None, 3, 6, 7)
-            Dense(shape=(6, 7, 8))(tf.placeholder((None, 3, 4, 5))) -> (None, 6, 7, 8)
-            Dense(shape=(6, 7, 8, 9))(tf.placeholder((None, 3, 4, 5))) -> (None, 6, 7, 8, 9)
-
         Args:
-            shape (tuple): Shape of input neurons in the layer
+            shape (tuple): Shape of output layer tensor
             activation (str): Activation function of the layer. Initially it is a sigmoid
             use_bias (bool): If True use bias weights
             name (str): Name of the layer
         """
-        super().__init__(shape, name)
-        self._activation = self._activations[activation]
+        super().__init__(shape, name, activation)
         self._use_bias = use_bias
 
     @name_scope
@@ -93,9 +92,7 @@ class Dense(Layer):
 
         Return (tf.Tensor): Output tensor of the layer
         """
-        tensor_shape = tuple(map(lambda x: int(x), tensor.shape[1:]))[-len(self._shape):]
-        if isinstance(tensor_shape, int):
-            tensor_shape = (tensor_shape,)
+        tensor_shape = tuple(tensor.shape.as_list())
         axes0 = [-i for i in range(1, len(tensor_shape)+1)]
         axes1 = [i for i in range(len(tensor_shape))]
 
@@ -245,6 +242,6 @@ class Layer2(object):
 
 
 if __name__ == "__main__":
-    inp = Input(shape=(3, 4, 5), include_batch=True)
-    model = Dense(shape=(6, 7))(inp())
+    inp = Input(shape=(3, 4, 5))
+    model = Dense(shape=(6, 7, 8))(inp())
     model2 = SRNN(shape=(6, 7, 8))(inp())
