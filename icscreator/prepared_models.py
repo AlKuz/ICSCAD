@@ -10,7 +10,7 @@ class ElmanNetwork(NeuralNetwork):
         self._inputs = inputs
         self._hiddens = hiddens
         self._outputs = outputs
-        Layer.seed = seed
+        Layer._seed = seed
         super().__init__(name='elman_network' if name is None else name)
 
     def _create_model(self):
