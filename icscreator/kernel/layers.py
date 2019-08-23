@@ -107,62 +107,61 @@ class Dense(Layer):
 
 
 class SRNN(Layer):
-    """Simple recurrent neural network"""
+    """Simple recurrent neural network layer"""
 
     def __init__(self, shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
-        super().__init__(shape, name)
-        self._activation = self._activations[activation]
+        super().__init__(shape, name, activation)
 
     @name_scope
     def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
         state = tf.Variable(tf.zeros(self._shape), trainable=False, name='state')
-        state_weights = tf.Variable(tf.random.uniform(tuple(reversed(self._shape)) + self._shape, -1, 1,
-                                                      seed=self._seed,
-                                                      name='state_weights'))
 
-        results = Dense(self._shape, activation='linear', use_bias=True, name='results')(tensor)
+        input_weights = Dense(self._shape, activation='linear', use_bias=True, name='input_weights')(tensor)
+        state_weights = Dense(self._shape, activation='linear', use_bias=False, name='state_weights')(state)
+        output = self._activation(input_weights + state_weights)
+        state = tf.assign(state, output)
 
-        axes0 = [-i for i in range(1, len(self._shape)+1)]
-        axes1 = [i for i in range(len(self._shape))]
-
-        for i in range(int(results.shape[0])):
-            r = results[i]
-            output = self._activation(r + tf.tensordot(state, state_weights, axes=[axes0, axes1]))
-            state = tf.assign(state, output)
-            results[i] = tf.assign(r, state)
-        return results
+        return state
 
 
-# class LSTM(Layer):
-#     """LSTM layer. Iterating through batch dimension and keep state between starting."""
-#
-#     def __init__(self, shape: tuple, state_shape: tuple = None, name: str = 'lstm'):
-#         super().__init__(shape, name)
-#         self._state_shape = state_shape if state_shape else shape
-#
-#     @name_scope
-#     def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
-#         state = tf.Variable(tf.zeros(self._state_shape), trainable=False, name='state')
-#
-#         with tf.name_scope('forget_gate'):
-#             state_peephole = Dense(self._state_shape, activation='linear', name='state_peephole')(state)
-#             input_peephole = Dense(self._state_shape, activation='linear', name='input_peephole')(tensor)
-#             forget_gate = self._activations['sigmoid'](state_peephole + input_peephole)
-#
-#         with tf.name_scope('remember_gate'):
-#             candidate_peephole = Dense(self._state_shape, activation='tanh', name='input_peephole')(tensor)
-#             remember_gate = candidate_peephole * (1 - forget_gate)
-#         forget_gate = cls.dense(inputs, num_outputs, name='forget_gate')
-#         input_gate = cls.dense(inputs, num_outputs, name='input_gate')
-#         candidate_gate = cls.dense(inputs, num_outputs, activation=tf.tanh, name='candidate_gate')
-#
-#         state = tf.assign(state, forget_gate * state + input_gate * candidate_gate)
-#
-#         output_gate = cls.dense(inputs, num_outputs, name='output_gate')
-#
-#         hidden = tf.assign(hidden, output_gate * tf.tanh(state))
-#
-#         return hidden
+class LSTM(Layer):
+    """Classical LSTM layer"""
+
+    def __init__(self, shape: tuple, name: str = 'lstm'):
+        super().__init__(shape, name)
+
+    @name_scope
+    def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
+        state = tf.Variable(tf.zeros(self._shape), trainable=False, name='state')
+        hidden = tf.Variable(tf.zeros(self._shape), trainable=False, name='hidden')
+
+        with tf.name_scope('forget_gate'):
+            hf = Dense(self._shape, activation='linear', use_bias=False, name='hidden')(hidden)
+            xf = Dense(self._shape, activation='linear', use_bias=True, name='input')(tensor)
+            forget_gate = self._activations['sigmoid'](hf + xf)
+
+        with tf.name_scope('input_gate'):
+            hi = Dense(self._shape, activation='linear', use_bias=False, name='hidden')(hidden)
+            xi = Dense(self._shape, activation='linear', use_bias=True, name='input')(tensor)
+            input_gate = self._activations['sigmoid'](hi + xi)
+
+        with tf.name_scope('candidate_cell'):
+            hc = Dense(self._shape, activation='linear', use_bias=False, name='hidden')(hidden)
+            xc = Dense(self._shape, activation='linear', use_bias=True, name='input')(tensor)
+            candidate_cell = self._activations['tanh'](hc + xc)
+
+        with tf.name_scope('output_gate'):
+            ho = Dense(self._shape, activation='linear', use_bias=False, name='hidden')(hidden)
+            xo = Dense(self._shape, activation='linear', use_bias=True, name='input')(tensor)
+            output_gate = self._activations['sigmoid'](ho + xo)
+
+        new_state = state * forget_gate + candidate_cell * input_gate
+        state = tf.assign(state, new_state)
+
+        new_hidden = self._activations['tanh'](state) * output_gate
+        hidden = tf.assign(hidden, new_hidden)
+
+        return hidden
 
 
 class Layer2(object):
@@ -245,3 +244,4 @@ if __name__ == "__main__":
     inp = Input(shape=(3, 4, 5))
     model = Dense(shape=(6, 7, 8))(inp())
     model2 = SRNN(shape=(6, 7, 8))(inp())
+    model3 = LSTM(shape=(6, 7, 8))(inp())
