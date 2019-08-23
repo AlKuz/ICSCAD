@@ -7,6 +7,7 @@ import tensorflow as tf
 from abc import abstractmethod
 import tqdm
 import json
+from typing import List
 
 from icscreator.kernel import Layer
 from icscreator.kernel.visualization import VisualTool
@@ -55,7 +56,19 @@ class NeuralNetwork(object):
         """
         pass
 
-    def predict(self, data: np.ndarray) -> np.ndarray:
+    def predict_step(self, data_step: np.ndarray) -> np.ndarray:
+        """
+        Prediction only for one time step
+
+        Args:
+            data_step (np.ndarray): Data from the one time step
+
+        Returns:
+            np.ndarray: Result of the prediction for the one time step
+        """
+        return self._session.run(self._model_outputs, feed_dict={self._model_inputs: data_step})
+
+    def predict(self, data: List[np.ndarray]) -> List[np.ndarray]:
         """
         Make prediction of neural network.
 
@@ -65,43 +78,62 @@ class NeuralNetwork(object):
         Returns (list): List of prediction results.
         """
         result = []
-        for i in range(data.shape[0]):
-            r = self._session.run(self._model_outputs, feed_dict={self._model_inputs: data[i]})
-            r = list(r) if len(r) > 1 else float(r)
-            result.append(r)
-        result = np.array(result)
-        if len(result.shape) == 1:
-            result = np.expand_dims(result, axis=1)
+        for data_step in data:
+            result_step = self.predict_step(data_step)
+            result.append(result_step)
         return result
 
-    def evaluate(self, input_data: list, target_data: list) -> float:
+    def evaluate_step(self, input_step: np.ndarray, target_step: np.ndarray) -> float:
+        """
+        Evaluate only for one time step
+
+        Args:
+            input_step (np.ndarray): One time step data to feed neural network.
+            target_step (np.ndarray): One time step data to compare network results.
+
+        Returns (float): accuracy for one time step
+        """
+        result = self._session.run(self._model_loss, feed_dict={self._model_inputs: input_step,
+                                                                self._model_targets: target_step})
+        return float(result)
+
+    def evaluate(self, input_data: List[np.ndarray], target_data: List[np.ndarray]) -> float:
         """
         Evaluate neural network.
 
         Args:
-            input_data (list): List of data to feed neural network.
-            target_data (list): List of data to compare network results.
+            input_data (np.ndarray): List of data to feed neural network.
+            target_data (np.ndarray): List of data to compare network results.
 
-        Returns (float):
+        Returns (float): result accuracy
         """
         loss_result = []
         for i, t in zip(input_data, target_data):
-            r = self._session.run(self._model_loss, feed_dict={self._model_inputs: i,
-                                                               self._model_targets: t})
-            loss_result.append(r)
+            loss = self.evaluate_step(i, t)
+            loss_result.append(loss)
         loss_result = float(np.mean(loss_result))
         return loss_result
 
-    def train(self, input_data: np.ndarray, target_data: np.ndarray, folder: str = None, name: str = None,
-              epochs=1000, early_stop=10, vis_tool: VisualTool = None):
+    def fit_step(self, input_step: np.ndarray, target_step: np.ndarray):
+        """
+        Training step for one time step data
+
+        Args:
+            input_step (np.ndarray): Data to feed neural network
+            target_step (np.ndarray): Data to compare network result
+        """
+        self._session.run([self._model_loss, self._model_optimizer],
+                          feed_dict={self._model_targets: target_step,
+                                     self._model_inputs: input_step})
+
+    def train(self, input_data: List[np.ndarray], target_data: List[np.ndarray],
+              folder: str = None, name: str = None, epochs=1000, early_stop=10, vis_tool: VisualTool = None):
         counter = 0
-        for i in range(epochs):
-            with tqdm.tqdm(range(len(input_data))) as tqdm_generator:
-                for d in tqdm_generator:
-                    loss, _ = self._session.run([self._model_loss, self._model_optimizer],
-                                                feed_dict={self._model_targets: target_data[d],
-                                                           self._model_inputs: input_data[d]})
-                    tqdm_generator.set_description(desc='Epoch {}, loss={:.8f}'.format(i+1, loss))
+        with tqdm.tqdm(range(epochs)) as tqdm_epochs:
+            for e in tqdm_epochs:
+                for d in range(len(input_data)): self.fit_step(input_data[d], target_data[d])
+                loss = self.evaluate(input_data, target_data)
+                tqdm_epochs.set_description(desc='Epoch {}, loss={:.6f}'.format(e+1, loss))
                 try:
                     if loss >= min_loss:
                         counter += 1
@@ -171,8 +203,8 @@ if __name__ == "__main__":
 
     data_jc = np.genfromtxt(DATA_PATH, delimiter=',')
 
-    fuel = np.expand_dims(data_jc[1::100, 1], axis=-1) / 4.0
-    freq = np.expand_dims(data_jc[1::100, 2] / 200000.0, axis=1)
+    fuel = np.expand_dims(data_jc[1::1000, 1], axis=-1) / 4.0
+    freq = np.expand_dims(data_jc[1::1000, 2], axis=1) / 200000.0
     # temp = np.expand_dims(data_jc[1::100, 3] / 1000.0, axis=1)
     # freq_temp = np.concatenate([freq, temp], axis=1)
 
@@ -182,7 +214,7 @@ if __name__ == "__main__":
                           legend=['Target', 'Model'],
                           ratio=9/16)
 
-    engine = ElmanNetwork(1, 20, 1, seed=13, name='engine')
+    engine = ElmanNetwork(1, 1, 1, seed=13, name='engine')
     engine.compile()
     engine.train(fuel, freq, folder=FOLDER, epochs=1000, vis_tool=vis_tool, early_stop=100)
 

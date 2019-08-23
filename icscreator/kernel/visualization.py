@@ -73,7 +73,7 @@ class VisualTool(object):
             ax.grid(True)
             ax.legend(self._legend, loc="upper left")
 
-    def draw(self, data_to_draw: List[np.ndarray], losses: List[float] = None):
+    def draw(self, data_to_draw: List[List[np.ndarray]], losses: List[float] = None):
         if self._show_loss and losses is not None:
             try:
                 self._losses: np.ndarray = np.append(self._losses, np.array([losses]), axis=0)
