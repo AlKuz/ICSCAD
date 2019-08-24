@@ -30,7 +30,7 @@ class Layer(object):
         'linear': lambda x: x
     }
 
-    def __init__(self, shape: tuple, name: str, activation: str = 'sigmoid'):
+    def __init__(self, shape: tuple, name: str):
         """
 
         Args:
@@ -40,10 +40,8 @@ class Layer(object):
         """
         self._shape = shape
         self._name = name
-        self._activation = self._activations[activation]
 
     def __call__(self, *args) -> tf.Tensor:
-        assert isinstance(args[0], tf.Tensor)
         return tf.keras.layers.Lambda(self.build_layer, output_shape=self._shape, name=self._name)(args[0])
 
     @abstractmethod
@@ -70,7 +68,7 @@ class Input(Layer):
             shape (tuple): Shape of input neurons in the layer
             name (str): Name of the layer
         """
-        super().__init__(shape, name, activation='linear')
+        super().__init__(shape, name)
 
     def __call__(self) -> tf.Tensor:
         return tf.keras.layers.Input(tensor=tf.compat.v1.placeholder(tf.float32, self._shape, self._name),
@@ -90,7 +88,8 @@ class Dense(Layer):
             use_bias (bool): If True use bias weights
             name (str): Name of the layer
         """
-        super().__init__(shape, name, activation)
+        super().__init__(shape, name)
+        self._activation = self._activations[activation]
         self._use_bias = use_bias
 
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
@@ -108,11 +107,27 @@ class Dense(Layer):
         return result
 
 
+class Delay(Layer):
+
+    def __init__(self, num_delays: int, name='delay'):
+        super().__init__(shape=(None,), name=name)
+        assert isinstance(num_delays, int)
+        self._num_delays = num_delays
+
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        tensor_shape = tuple(tensor.shape.as_list())
+        delays = tf.Variable(tf.zeros(shape=(self._num_delays,) + tensor_shape), trainable=False, name='tensor_delays')
+        concatenated = tf.concat([[tensor], delays[:-1, ...]], axis=0)
+        delays = tf.compat.v1.assign(delays, concatenated)
+        return delays
+
+
 class SRNN(Layer):
     """Simple recurrent neural network layer"""
 
     def __init__(self, shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
-        super().__init__(shape, name, activation)
+        super().__init__(shape, name)
+        self._activation = self._activations[activation]
 
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
         inlet_shape = tensor.shape.as_list()
@@ -127,7 +142,7 @@ class SRNN(Layer):
         inlet = tensor_mul(tensor, inlet_weights)
         hidden = tensor_mul(state, hidden_weights)
         outlet = self._activation(inlet + hidden + biases)
-        state = tf.assign(state, outlet)
+        state = tf.compat.v1.assign(state, outlet)
         return state
 
 
@@ -251,6 +266,12 @@ if __name__ == "__main__":
     inp = Input(shape=(3, 4, 5))()
     model1 = Dense(shape=(6, 7, 8))(inp)
     model1 = tf.keras.models.Model(inp, model1)
+    model1.summary()
+    model1.save('./model1.hdf5')
     model2 = SRNN(shape=(6, 7, 8))(inp)
     model2 = tf.keras.models.Model(inp, model2)
+    model2.summary()
+    model3 = Delay(num_delays=5)(inp)
+    model3 = tf.keras.models.Model(inp, model3)
+    model3.summary()
     # model3 = LSTM(shape=(6, 7, 8))(inp)
