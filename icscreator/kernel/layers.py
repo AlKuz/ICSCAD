@@ -12,6 +12,13 @@ def name_scope(method):
     return wrapper
 
 
+def tensor_mul(tensor1, tensor2) -> tf.Tensor:
+    min_length = min(len(tensor1.shape.as_list()), len(tensor2.shape.as_list()))
+    axes0 = [-i for i in range(1, min_length + 1)]
+    axes1 = [i for i in range(min_length)]
+    return tf.tensordot(tensor1, tensor2, axes=[axes0, axes1])
+
+
 class Layer(object):
     """Base layer class"""
 
@@ -35,8 +42,12 @@ class Layer(object):
         self._name = name
         self._activation = self._activations[activation]
 
+    def __call__(self, *args) -> tf.Tensor:
+        assert isinstance(args[0], tf.Tensor)
+        return tf.keras.layers.Lambda(self.build_layer, output_shape=self._shape, name=self._name)(args[0])
+
     @abstractmethod
-    def __call__(self, *args, **kwargs) -> tf.Tensor:
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
         raise Exception("Method doesn't implemented")
 
     @property
@@ -51,19 +62,19 @@ class Layer(object):
 class Input(Layer):
     """Input layer"""
 
-    def __init__(self, shape: tuple, name: str = 'input', activation: str = 'linear'):
+    def __init__(self, shape: tuple, name: str = 'input'):
         """
         Input layer initialization
 
         Args:
             shape (tuple): Shape of input neurons in the layer
             name (str): Name of the layer
-            activation (str): Layer activation. Linear in the default
         """
-        super().__init__(shape, name, activation)
+        super().__init__(shape, name, activation='linear')
 
     def __call__(self) -> tf.Tensor:
-        return self._activation(tf.compat.v1.placeholder(tf.float32, self._shape, self._name))
+        return tf.keras.layers.Input(tensor=tf.compat.v1.placeholder(tf.float32, self._shape, self._name),
+                                     name=self._name)
 
 
 class Dense(Layer):
@@ -82,27 +93,18 @@ class Dense(Layer):
         super().__init__(shape, name, activation)
         self._use_bias = use_bias
 
-    @name_scope
-    def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
-        """
-        Full connected layer.
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        tensor_shape = tensor.shape.as_list()
 
-        Args:
-            tensor (tf.Tensor): Input tensor in the layer
-
-        Return (tf.Tensor): Output tensor of the layer
-        """
-        tensor_shape = tuple(tensor.shape.as_list())
-        axes0 = [-i for i in range(1, len(tensor_shape)+1)]
-        axes1 = [i for i in range(len(tensor_shape))]
-
-        weights = tf.Variable(tf.random.uniform(tensor_shape + self._shape, -1, 1, seed=self._seed, name='weights'))
+        weights = tf.random.uniform(tuple(reversed(tensor_shape)) + self._shape, -1, 1, seed=self._seed)
+        weights = tf.Variable(weights, name='weights')
+        result = tensor_mul(tensor, weights)
 
         if self._use_bias:
-            biases = tf.Variable(tf.random.uniform(self._shape, -1, 1, seed=self._seed, name='biases'))
-            result = self._activation(tf.tensordot(tensor, weights, axes=[axes0, axes1]) + biases)
-        else:
-            result = self._activation(tf.tensordot(tensor, weights, axes=[axes0, axes1]))
+            biases = tf.Variable(tf.random.uniform(self._shape, -1, 1, seed=self._seed), name='biases')
+            result = self._activation(result + biases)
+
+        result = self._activation(result)
         return result
 
 
@@ -112,15 +114,20 @@ class SRNN(Layer):
     def __init__(self, shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
         super().__init__(shape, name, activation)
 
-    @name_scope
-    def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        inlet_shape = tensor.shape.as_list()
         state = tf.Variable(tf.zeros(self._shape), trainable=False, name='state')
 
-        input_weights = Dense(self._shape, activation='linear', use_bias=True, name='input_weights')(tensor)
-        state_weights = Dense(self._shape, activation='linear', use_bias=False, name='state_weights')(state)
-        output = self._activation(input_weights + state_weights)
-        state = tf.assign(state, output)
+        biases = tf.Variable(tf.random.uniform(self._shape, -1, 1, seed=self._seed), name='biases')
+        inlet_weights = tf.random.uniform(tuple(reversed(inlet_shape)) + self._shape, -1, 1, seed=self._seed)
+        inlet_weights = tf.Variable(inlet_weights, name='inlet_weights')
+        hidden_weights = tf.random.uniform(tuple(reversed(self._shape)) + self._shape, -1, 1, seed=self._seed)
+        hidden_weights = tf.Variable(hidden_weights, name='hidden_weights')
 
+        inlet = tensor_mul(tensor, inlet_weights)
+        hidden = tensor_mul(state, hidden_weights)
+        outlet = self._activation(inlet + hidden + biases)
+        state = tf.assign(state, outlet)
         return state
 
 
@@ -241,7 +248,9 @@ class Layer2(object):
 
 
 if __name__ == "__main__":
-    inp = Input(shape=(3, 4, 5))
-    model = Dense(shape=(6, 7, 8))(inp())
-    model2 = SRNN(shape=(6, 7, 8))(inp())
-    model3 = LSTM(shape=(6, 7, 8))(inp())
+    inp = Input(shape=(3, 4, 5))()
+    model1 = Dense(shape=(6, 7, 8))(inp)
+    model1 = tf.keras.models.Model(inp, model1)
+    model2 = SRNN(shape=(6, 7, 8))(inp)
+    model2 = tf.keras.models.Model(inp, model2)
+    # model3 = LSTM(shape=(6, 7, 8))(inp)
