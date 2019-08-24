@@ -1,118 +1,200 @@
-"""Neural network layer class"""
+"""Neural network layer classes (only for online models)"""
 
 import tensorflow as tf
-from typing import List
+from abc import abstractmethod
+
+
+def name_scope(method):
+    def wrapper(self, *args):
+        with tf.name_scope(self._name):
+            return method(self, *args)
+    return wrapper
+
+
+def tensor_mul(tensor1, tensor2) -> tf.Tensor:
+    min_length = min(len(tensor1.shape.as_list()), len(tensor2.shape.as_list()))
+    axes0 = [-i for i in range(1, min_length + 1)]
+    axes1 = [i for i in range(min_length)]
+    return tf.tensordot(tensor1, tensor2, axes=[axes0, axes1])
 
 
 class Layer(object):
-    """Neural network layers"""
+    """Base layer class"""
 
-    seed = None
+    _seed = None
+    _activations = {
+        'sigmoid': tf.keras.activations.sigmoid,
+        'tanh': tf.keras.activations.tanh,
+        'relu': tf.keras.activations.relu,
+        'linear': lambda x: x
+    }
 
-    @classmethod
-    def input(cls, num_inputs: int, name='input') -> tf.Tensor:
+    def __init__(self, shape: tuple, name: str):
         """
-        Input layer.
 
         Args:
-            num_inputs (int): Number of input neurons in the layer
+            shape (tuple): Output layer shape
             name (str): Name of the layer
-
-        Return (tf.Tensor): Output tensor of the layer
+            activation (str): Activation function of the layer. Initially it is a sigmoid
         """
-        return tf.compat.v1.placeholder(tf.float32, [num_inputs], name)
+        self._shape = shape
+        self._name = name
 
-    @classmethod
-    def state(cls, num_outputs: int, name='state') -> tf.Variable:
+    def __call__(self, *args) -> tf.Tensor:
+        return tf.keras.layers.Lambda(self.build_layer, output_shape=self._shape, name=self._name)(args[0])
+
+    @abstractmethod
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        raise Exception("Method doesn't implemented")
+
+    @property
+    def seed(self):
+        return self._seed
+
+    @seed.setter
+    def seed(self, new_seed: int):
+        self._seed = new_seed
+
+
+def Input(shape: tuple, name: str = 'input'):
+    return tf.keras.layers.Input(tensor=tf.compat.v1.placeholder(tf.float32, shape, name), name=name)
+
+
+class Dense(Layer):
+    """Full connected layer"""
+
+    def __init__(self, shape: tuple, activation: str = 'sigmoid', use_bias: bool = True, name: str = 'dense'):
         """
-        Untrainable variable for keeping state inside neural network.
+        Dense layer initialization.
 
         Args:
-            num_outputs (int): Number of output neurons in the layer
+            shape (tuple): Shape of output layer tensor
+            activation (str): Activation function of the layer. Initially it is a sigmoid
+            use_bias (bool): If True use bias weights
             name (str): Name of the layer
-
-        Return (tf.Variable): Tensorflow variable
         """
-        return tf.Variable(tf.zeros([num_outputs]), trainable=False, name=name)
+        super().__init__(shape, name)
+        self._activation = self._activations[activation]
+        self._use_bias = use_bias
 
-    @classmethod
-    def assign(cls, target, value) -> tf.Tensor:
-        return tf.assign(target, value)
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        tensor_shape = tensor.shape.as_list()
 
-    @classmethod
-    def concat(cls, tensors_list: List[tf.Tensor], axis: int = 0, name: str = 'concat'):
-        return tf.concat(tensors_list, axis, name)
+        weights = tf.random.uniform(tuple(reversed(tensor_shape)) + self._shape, -1, 1, seed=self._seed)
+        weights = tf.Variable(weights, name=self._name + '_' + 'weights')
+        result = tensor_mul(tensor, weights)
 
-    @classmethod
-    def dense(cls, tensor: tf.Tensor, num_outputs: int, activation=tf.sigmoid, name='dense') -> tf.Tensor:
-        """
-        Full connected layer.
+        if self._use_bias:
+            biases = tf.Variable(tf.random.uniform(self._shape, -1, 1, seed=self._seed),
+                                 name=self._name + '_' + 'biases')
+            result = self._activation(result + biases)
 
-        Args:
-            tensor (tf.Tensor): Input tensor in the layer
-            num_outputs (int): Number of output neurons in the layer
-            activation (func): Activation function of the layer. Initially it is a sigmoid
-            name (str): Name of the layer
-
-        Return (tf.Tensor): Output tensor of the layer
-        """
-        assert len(tensor.shape) == 1
-        num_inputs = int(tensor.shape[0])
-
-        with tf.name_scope(name):
-            biases = tf.Variable(tf.random.uniform([num_outputs], -1, 1, seed=cls.seed, name='biases'))
-            weights = tf.Variable(tf.random.uniform([num_outputs, num_inputs], -1, 1, seed=cls.seed, name='weights'))
-            result = activation(tf.linalg.matvec(weights, tensor) + biases)
-
+        result = self._activation(result)
         return result
 
-    @classmethod
-    def lstm(cls, tensor: tf.Tensor, num_outputs: int, name='lstm') -> tf.Tensor:
-        """
-        Long-short term memory layer.
 
-        Args:
-            tensor (tf.Tensor): Input tensor in the layer
-            num_outputs (int): Number of output neurons in the layer
-            name (str): Name of the layer
+class Delay(Layer):
 
-        Return (tf.Tensor): Output tensor of the layer
-        """
-        with tf.name_scope(name):
-            state = tf.Variable(tf.zeros([num_outputs]), trainable=False, name='state')
-            hidden = tf.Variable(tf.zeros([num_outputs]), trainable=False, name='hidden')
+    def __init__(self, num_delays: int, name='delay'):
+        super().__init__(shape=(None,), name=name)
+        assert isinstance(num_delays, int)
+        self._num_delays = num_delays
 
-            inputs = tf.concat([hidden, tensor], axis=0)
-
-            forget_gate = cls.dense(inputs, num_outputs, name='forget_gate')
-            input_gate = cls.dense(inputs, num_outputs, name='input_gate')
-            candidate_gate = cls.dense(inputs, num_outputs, activation=tf.tanh, name='candidate_gate')
-
-            state = tf.assign(state, forget_gate * state + input_gate * candidate_gate)
-
-            output_gate = cls.dense(inputs, num_outputs, name='output_gate')
-
-            hidden = tf.assign(hidden, output_gate * tf.tanh(state))
-
-            return hidden
-
-    @classmethod
-    def delay(cls, tensor: tf.Tensor, num_delays: int, name='delay') -> tf.Tensor:
-        """
-        Layer for delay input tensor in multiple steps.
-
-        Args:
-            tensor (tf.Tensor): Input tensor in the layer
-            num_delays (int): Number of delays
-            name (str): Name of the layer
-
-        Return (tf.Tensor): Output tensor of the layer
-        """
-        assert len(tensor.shape) == 1
-        num_inputs = int(tensor.shape[0])
-
-        with tf.name_scope(name):
-            delays = tf.Variable(tf.zeros([num_inputs * (num_delays + 1)]), trainable=False, name='tensor_delays')
-            concatenated = tf.concat([tensor, delays[:-num_inputs]], axis=0)
-            delays = tf.assign(delays, concatenated)
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        tensor_shape = tuple(tensor.shape.as_list())
+        delays = tf.Variable(tf.zeros(shape=(self._num_delays,) + tensor_shape), trainable=False,
+                             name=self._name + '_' + 'tensor_delays')
+        concatenated = tf.concat([[tensor], delays[:-1, ...]], axis=0)
+        delays = tf.compat.v1.assign(delays, concatenated)
         return delays
+
+
+class SRNN(Layer):
+    """Simple recurrent neural network layer"""
+
+    def __init__(self, shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
+        super().__init__(shape, name)
+        self._activation = self._activations[activation]
+
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        inlet_shape = tensor.shape.as_list()
+        state = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'state')
+
+        biases = tf.Variable(tf.random.uniform(self._shape, -1, 1, seed=self._seed), name=self._name + '_' + 'biases')
+        inlet_weights = tf.random.uniform(tuple(reversed(inlet_shape)) + self._shape, -1, 1, seed=self._seed)
+        inlet_weights = tf.Variable(inlet_weights, name=self._name + '_' + 'inlet_weights')
+        hidden_weights = tf.random.uniform(tuple(reversed(self._shape)) + self._shape, -1, 1, seed=self._seed)
+        hidden_weights = tf.Variable(hidden_weights, name=self._name + '_' + 'hidden_weights')
+
+        inlet = tensor_mul(tensor, inlet_weights)
+        hidden = tensor_mul(state, hidden_weights)
+        outlet = self._activation(inlet + hidden + biases)
+        state = tf.compat.v1.assign(state, outlet)
+        return state
+
+
+class LSTM(Layer):
+    """Classical LSTM layer"""
+
+    def __init__(self, shape: tuple, name: str = 'lstm'):
+        super().__init__(shape, name)
+
+    def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        state = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'state')
+        hidden = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'hidden')
+
+        with tf.name_scope('forget_gate'):
+            hf = Dense(self._shape, activation='linear', use_bias=False,
+                       name=self._name + '_' + 'hf').build_layer(hidden)
+            xf = Dense(self._shape, activation='linear', use_bias=True,
+                       name=self._name + '_' + 'xf').build_layer(tensor)
+            forget_gate = self._activations['sigmoid'](hf + xf)
+
+        with tf.name_scope('input_gate'):
+            hi = Dense(self._shape, activation='linear', use_bias=False,
+                       name=self._name + '_' + 'hi').build_layer(hidden)
+            xi = Dense(self._shape, activation='linear', use_bias=True,
+                       name=self._name + '_' + 'xi').build_layer(tensor)
+            input_gate = self._activations['sigmoid'](hi + xi)
+
+        with tf.name_scope('candidate_cell'):
+            hc = Dense(self._shape, activation='linear', use_bias=False,
+                       name=self._name + '_' + 'hc').build_layer(hidden)
+            xc = Dense(self._shape, activation='linear', use_bias=True,
+                       name=self._name + '_' + 'xc').build_layer(tensor)
+            candidate_cell = self._activations['tanh'](hc + xc)
+
+        with tf.name_scope('output_gate'):
+            ho = Dense(self._shape, activation='linear', use_bias=False,
+                       name=self._name + '_' + 'ho').build_layer(hidden)
+            xo = Dense(self._shape, activation='linear', use_bias=True,
+                       name=self._name + '_' + 'xo').build_layer(tensor)
+            output_gate = self._activations['sigmoid'](ho + xo)
+
+        new_state = state * forget_gate + candidate_cell * input_gate
+        state = tf.compat.v1.assign(state, new_state)
+
+        new_hidden = self._activations['tanh'](state) * output_gate
+        hidden = tf.compat.v1.assign(hidden, new_hidden)
+
+        return hidden
+
+
+if __name__ == "__main__":
+    inp = Input(shape=(3, 4, 5))
+
+    model1 = Dense(shape=(6, 7, 8))(inp)
+    model1 = tf.keras.models.Model(inp, model1)
+    model1.summary()
+
+    model2 = SRNN(shape=(6, 7, 8))(inp)
+    model2 = tf.keras.models.Model(inp, model2)
+    model2.summary()
+
+    model3 = Delay(num_delays=5)(inp)
+    model3 = tf.keras.models.Model(inp, model3)
+    model3.summary()
+
+    model4 = LSTM(shape=(6, 7, 8))(inp)
+    model4 = tf.keras.models.Model(inp, model4)
+    model4.summary()
