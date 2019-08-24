@@ -164,7 +164,7 @@ class NeuralNetwork(object):
 
 
 if __name__ == "__main__":
-    from icscreator.prepared_models import ElmanNetwork
+    from icscreator.kernel.prepared_models import ElmanNetwork
 
     FOLDER = '/home/alexander/Projects/ICSCreator/static/models'
     DATA_PATH = "/home/alexander/Projects/ICSCreator/static/data/Data_JC.csv"
