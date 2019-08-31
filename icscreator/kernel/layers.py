@@ -29,7 +29,7 @@ class Layer(object):
         'linear': lambda x: x
     }
 
-    def __init__(self, shape: tuple, name: str):
+    def __init__(self, input_shape: tuple, output_shape: tuple, name: str):
         """
 
         Args:
@@ -37,11 +37,17 @@ class Layer(object):
             name (str): Name of the layer
             activation (str): Activation function of the layer. Initially it is a sigmoid
         """
-        self._shape = shape
+        assert len(input_shape) > 1, "Input shape contains batch shape in the first dimension"
+        self._input_shape = input_shape[1:]
+        self._output_shape = (output_shape,) if isinstance(output_shape, int) else output_shape
         self._name = name
 
-    def __call__(self, *args) -> tf.Tensor:
-        return tf.keras.layers.Lambda(self.build_layer, output_shape=self._shape, name=self._name)(args[0])
+    def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
+        with tf.keras.backend.get_session().as_default():
+            result = tf.keras.layers.Lambda(lambda t: tf.compat.v2.map_fn(self.build_layer, t),
+                                      name=self._name)(tensor)
+            tf.initialize_all_variables().run()
+        return result
 
     @abstractmethod
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
@@ -112,25 +118,35 @@ class Delay(Layer):
 class SRNN(Layer):
     """Simple recurrent neural network layer"""
 
-    def __init__(self, shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
-        super().__init__(shape, name)
+    def __init__(self, input_shape: tuple, output_shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
+        super().__init__(input_shape, output_shape, name)
+        self._state = None
+        self._biases = None
+        self._inlet_weights = None
+        self._hidden_weights = None
         self._activation = self._activations[activation]
+        self._create_variables()
+
+    def _create_variables(self):
+        self._state = tf.Variable(tf.zeros(self._output_shape), trainable=False, name=self._name + '_' + 'state')
+
+        self._biases = tf.random.uniform(self._output_shape, -1, 1, seed=self._seed)
+        self._biases = tf.Variable(self._biases, name=self._name + '_' + 'biases')
+
+        inlet_shape = tuple(reversed(self._input_shape)) + self._output_shape
+        self._inlet_weights = tf.random.uniform(inlet_shape, -1, 1, seed=self._seed)
+        self._inlet_weights = tf.Variable(self._inlet_weights, name=self._name + '_' + 'inlet_weights')
+
+        hidden_shape = tuple(reversed(self._output_shape)) + self._output_shape
+        self._hidden_weights = tf.random.uniform(hidden_shape, -1, 1, seed=self._seed)
+        self._hidden_weights = tf.Variable(self._hidden_weights, name=self._name + '_' + 'hidden_weights')
 
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
-        inlet_shape = tensor.shape.as_list()
-        state = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'state')
-
-        biases = tf.Variable(tf.random.uniform(self._shape, -1, 1, seed=self._seed), name=self._name + '_' + 'biases')
-        inlet_weights = tf.random.uniform(tuple(reversed(inlet_shape)) + self._shape, -1, 1, seed=self._seed)
-        inlet_weights = tf.Variable(inlet_weights, name=self._name + '_' + 'inlet_weights')
-        hidden_weights = tf.random.uniform(tuple(reversed(self._shape)) + self._shape, -1, 1, seed=self._seed)
-        hidden_weights = tf.Variable(hidden_weights, name=self._name + '_' + 'hidden_weights')
-
-        inlet = tensor_mul(tensor, inlet_weights)
-        hidden = tensor_mul(state, hidden_weights)
-        outlet = self._activation(inlet + hidden + biases)
-        state = tf.compat.v1.assign(state, outlet)
-        return state
+        inlet = tensor_mul(tensor, self._inlet_weights)
+        hidden = tensor_mul(self._state, self._hidden_weights)
+        outlet = self._activation(inlet + hidden + self._biases)
+        self._state = tf.compat.v1.assign(self._state, outlet)
+        return self._state
 
 
 class LSTM(Layer):
@@ -140,34 +156,34 @@ class LSTM(Layer):
         super().__init__(shape, name)
 
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
-        state = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'state')
-        hidden = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'hidden')
+        state = tf.Variable(tf.zeros(self._output_shape), trainable=False, name=self._name + '_' + 'state')
+        hidden = tf.Variable(tf.zeros(self._output_shape), trainable=False, name=self._name + '_' + 'hidden')
 
         with tf.name_scope('forget_gate'):
-            hf = Dense(self._shape, activation='linear', use_bias=False,
+            hf = Dense(self._output_shape, activation='linear', use_bias=False,
                        name=self._name + '_' + 'hf').build_layer(hidden)
-            xf = Dense(self._shape, activation='linear', use_bias=True,
+            xf = Dense(self._output_shape, activation='linear', use_bias=True,
                        name=self._name + '_' + 'xf').build_layer(tensor)
             forget_gate = self._activations['sigmoid'](hf + xf)
 
         with tf.name_scope('input_gate'):
-            hi = Dense(self._shape, activation='linear', use_bias=False,
+            hi = Dense(self._output_shape, activation='linear', use_bias=False,
                        name=self._name + '_' + 'hi').build_layer(hidden)
-            xi = Dense(self._shape, activation='linear', use_bias=True,
+            xi = Dense(self._output_shape, activation='linear', use_bias=True,
                        name=self._name + '_' + 'xi').build_layer(tensor)
             input_gate = self._activations['sigmoid'](hi + xi)
 
         with tf.name_scope('candidate_cell'):
-            hc = Dense(self._shape, activation='linear', use_bias=False,
+            hc = Dense(self._output_shape, activation='linear', use_bias=False,
                        name=self._name + '_' + 'hc').build_layer(hidden)
-            xc = Dense(self._shape, activation='linear', use_bias=True,
+            xc = Dense(self._output_shape, activation='linear', use_bias=True,
                        name=self._name + '_' + 'xc').build_layer(tensor)
             candidate_cell = self._activations['tanh'](hc + xc)
 
         with tf.name_scope('output_gate'):
-            ho = Dense(self._shape, activation='linear', use_bias=False,
+            ho = Dense(self._output_shape, activation='linear', use_bias=False,
                        name=self._name + '_' + 'ho').build_layer(hidden)
-            xo = Dense(self._shape, activation='linear', use_bias=True,
+            xo = Dense(self._output_shape, activation='linear', use_bias=True,
                        name=self._name + '_' + 'xo').build_layer(tensor)
             output_gate = self._activations['sigmoid'](ho + xo)
 
@@ -187,7 +203,7 @@ if __name__ == "__main__":
     model1 = tf.keras.models.Model(inp, model1)
     model1.summary()
 
-    model2 = SRNN(shape=(6, 7, 8))(inp)
+    model2 = SRNN(output_shape=(6, 7, 8))(inp)
     model2 = tf.keras.models.Model(inp, model2)
     model2.summary()
 
