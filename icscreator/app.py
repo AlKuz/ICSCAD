@@ -3,7 +3,7 @@ Main file for launch application
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from icscreator.kernel.prepared_models import multilayer_srnn
+from icscreator.kernel.models import multilayer_srnn
 
 NAME = 'engine'
 MODEL_FOLDER = './static/models/'

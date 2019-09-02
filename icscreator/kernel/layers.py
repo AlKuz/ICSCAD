@@ -24,30 +24,26 @@ class Layer(object):
     _seed = None
     _activations = {
         'sigmoid': tf.keras.activations.sigmoid,
-        'tanh': tf.keras.activations.tanh,
         'relu': tf.keras.activations.relu,
-        'linear': lambda x: x
+        'tanh': tf.keras.activations.tanh,
+        'linear': tf.keras.activations.linear
     }
+    _COUNTER = 0
 
-    def __init__(self, input_shape: tuple, output_shape: tuple, name: str):
+    def __init__(self, shape: tuple, name: str = None):
         """
 
         Args:
             shape (tuple): Output layer shape
             name (str): Name of the layer
-            activation (str): Activation function of the layer. Initially it is a sigmoid
         """
-        assert len(input_shape) > 1, "Input shape contains batch shape in the first dimension"
-        self._input_shape = input_shape[1:]
-        self._output_shape = (output_shape,) if isinstance(output_shape, int) else output_shape
-        self._name = name
+        self._shape = shape
+        name = self.__class__.__name__ if name is None else name
+        self._name = name + '_' + str(self._COUNTER)
+        self.__class__._COUNTER += 1
 
     def __call__(self, tensor: tf.Tensor) -> tf.Tensor:
-        with tf.keras.backend.get_session().as_default():
-            result = tf.keras.layers.Lambda(lambda t: tf.compat.v2.map_fn(self.build_layer, t),
-                                      name=self._name)(tensor)
-            tf.initialize_all_variables().run()
-        return result
+        return tf.keras.layers.Lambda(lambda t: self.build_layer(t), name=self._name)(tensor)
 
     @abstractmethod
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
@@ -69,7 +65,7 @@ def Input(shape: tuple, name: str = 'input'):
 class Dense(Layer):
     """Full connected layer"""
 
-    def __init__(self, shape: tuple, activation: str = 'sigmoid', use_bias: bool = True, name: str = 'dense'):
+    def __init__(self, shape: tuple, activation: str = 'sigmoid', use_bias: bool = True, name: str = None):
         """
         Dense layer initialization.
 
@@ -101,7 +97,7 @@ class Dense(Layer):
 
 class Delay(Layer):
 
-    def __init__(self, num_delays: int, name='delay'):
+    def __init__(self, num_delays: int, name: str = None):
         super().__init__(shape=(None,), name=name)
         assert isinstance(num_delays, int)
         self._num_delays = num_delays
@@ -118,30 +114,30 @@ class Delay(Layer):
 class SRNN(Layer):
     """Simple recurrent neural network layer"""
 
-    def __init__(self, input_shape: tuple, output_shape: tuple, activation: str = 'sigmoid', name: str = 'srnn'):
-        super().__init__(input_shape, output_shape, name)
+    def __init__(self, shape: tuple, activation: str = 'sigmoid', name: str = None):
+        super().__init__(shape, name)
         self._state = None
         self._biases = None
         self._inlet_weights = None
         self._hidden_weights = None
         self._activation = self._activations[activation]
-        self._create_variables()
 
-    def _create_variables(self):
-        self._state = tf.Variable(tf.zeros(self._output_shape), trainable=False, name=self._name + '_' + 'state')
+    def _create_variables(self, inlet_shape):
+        self._state = tf.Variable(tf.zeros(self._shape), trainable=False, name=self._name + '_' + 'state')
 
-        self._biases = tf.random.uniform(self._output_shape, -1, 1, seed=self._seed)
+        self._biases = tf.random.uniform(self._shape, -1, 1, seed=self._seed)
         self._biases = tf.Variable(self._biases, name=self._name + '_' + 'biases')
 
-        inlet_shape = tuple(reversed(self._input_shape)) + self._output_shape
+        inlet_shape = tuple(reversed(inlet_shape)) + self._shape
         self._inlet_weights = tf.random.uniform(inlet_shape, -1, 1, seed=self._seed)
         self._inlet_weights = tf.Variable(self._inlet_weights, name=self._name + '_' + 'inlet_weights')
 
-        hidden_shape = tuple(reversed(self._output_shape)) + self._output_shape
+        hidden_shape = tuple(reversed(self._shape)) + self._shape
         self._hidden_weights = tf.random.uniform(hidden_shape, -1, 1, seed=self._seed)
         self._hidden_weights = tf.Variable(self._hidden_weights, name=self._name + '_' + 'hidden_weights')
 
     def build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        self._create_variables(tensor.shape.as_list())
         inlet = tensor_mul(tensor, self._inlet_weights)
         hidden = tensor_mul(self._state, self._hidden_weights)
         outlet = self._activation(inlet + hidden + self._biases)
