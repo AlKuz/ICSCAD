@@ -7,6 +7,12 @@ from typing import List
 from matplotlib import pyplot as plt
 
 
+class EmptyVisualTool(object):
+
+    def draw(self, data_to_draw: List[List[np.ndarray]], losses: List[float] = None):
+        pass
+
+
 class VisualTool(object):
     """Visualization of training process"""
 
@@ -64,6 +70,7 @@ class VisualTool(object):
         self._loss_ax.set_xlabel("Epochs")
         self._loss_ax.set_ylabel("Loss values")
         self._loss_ax.grid(True)
+        self._loss_ax.legend(reversed(self._titles), loc="upper left")
 
     def _add_markup_to_params(self):
         for i, ax in enumerate(self._param_axs):
