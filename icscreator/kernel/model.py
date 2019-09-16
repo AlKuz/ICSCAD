@@ -1,12 +1,10 @@
-"""Module for different prepared neural network models"""
-
-from icscreator.kernel.layers import Input, Dense, SRNN, LSTM
 import tensorflow as tf
-from typing import List, Tuple
-from abc import abstractmethod
 import numpy as np
-from tqdm import tqdm
+from abc import abstractmethod
+import os
+from icscreator.kernel.layers import Input
 from icscreator.kernel.visualization import VisualTool, EmptyVisualTool
+from tqdm import tqdm
 
 
 class Model(object):
@@ -31,6 +29,7 @@ class Model(object):
         self._target = None
         self._optimizer = None
         self._loss = None
+        self._saver = None
 
     @abstractmethod
     def _build_model(self) -> (tf.Tensor, tf.Tensor):
@@ -41,6 +40,22 @@ class Model(object):
             (tf.Tensor, tf.Tensor): (model_input, model_output)
         """
         raise NotImplemented("Method '_build_model' is not implemented is {}".format(self.__class__.__name__))
+
+    def save(self, path: str):
+        folder = os.path.join(path, self._name)
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        model_path = os.path.join(folder, self._name + '.ckpt')
+        self._saver.save(self._session, model_path)
+        print("Model was saved to", folder)
+
+    def load(self, folder: str):
+        model_path = os.path.join(folder, self._name + '.ckpt')
+        self._session.as_default()
+        self._input, self._output = self._build_model()
+        self._saver = tf.train.Saver()
+        self._saver.restore(self._session, model_path)
+        print("Model was loaded from", folder)
 
     def compile(self, loss: str, optimizer: str, optimizer_parameters: dict):
         """
@@ -63,6 +78,7 @@ class Model(object):
         self._loss = self._LOSSES[loss](self._target, self._output)
         self._optimizer = self._OPTIMIZERS[optimizer](**optimizer_parameters).minimize(self._loss)
         self._session.run(tf.compat.v1.global_variables_initializer())
+        self._saver = tf.train.Saver()
 
     def predict(self, input_data: np.ndarray) -> np.ndarray:
         result = []
@@ -72,9 +88,11 @@ class Model(object):
         result = np.array(result)
         return result
 
-    def fit(self, input_data, target_data, epochs: int = 1000, vizualizer: VisualTool = EmptyVisualTool):
+    def fit(self, input_data, target_data, epochs: int = 1000, vizualizer: VisualTool = EmptyVisualTool,
+            model_path=None):
         self._session.as_default()
         mean_loss = None
+        mean_error = None
         for e in range(epochs):
             losses = []
             for input_sample, target_sample in tqdm(zip(input_data, target_data),
@@ -86,57 +104,11 @@ class Model(object):
                 losses.append(loss)
             mean_loss = sum(losses) / len(losses)
             model_result = self.predict(input_data)
-            losses = np.std(target_data - model_result, axis=0)
-            vizualizer.draw([model_result, target_data], list(losses))
-
-
-class MultilayerSRNN(Model):
-
-    def __init__(self, layer_sizes: List[int], activations: List[str] = ('sigmoid',), name: str = None):
-        self._layer_sizes = layer_sizes
-        self._activations = activations * (len(layer_sizes) - 1) if len(activations) == 1 else activations
-        super().__init__(name)
-
-    def _build_model(self) -> (tf.Tensor, tf.Tensor):
-        model_input = Input(shape=(self._layer_sizes[0],))
-        model = SRNN(shape=(self._layer_sizes[1],), activation=self._activations[0])(model_input)
-        for layer, activation in zip(self._layer_sizes[2:], self._activations[1:]):
-            model = SRNN(shape=(layer,), activation=activation)(model)
-        return model_input, model
-
-
-class LSTMModel(Model):
-
-    def __init__(self, input_shape: Tuple[int], output_shape: Tuple[int], name: str = None):
-        self._input_shape = input_shape
-        self._output_shape = output_shape
-        super().__init__(name)
-
-    def _build_model(self) -> (tf.Tensor, tf.Tensor):
-        model_input = Input(shape=self._input_shape)
-        model = LSTM(self._output_shape)(model_input)
-        return model_input, model
-
-
-if __name__ == "__main__":
-    DATA = "/home/alexander/Projects/ICSCreator/static/data/Data_JC.csv"
-
-    data = np.genfromtxt(DATA, delimiter=',', skip_header=True)
-    fuel = np.expand_dims(data[::100, 1], axis=-1) / 4.0
-    freq = np.expand_dims(data[::100, 2], axis=-1) / 200000.0
-    temp = np.expand_dims(data[::100, 3], axis=-1) / 1000.0
-    output = np.concatenate([freq, temp], axis=-1)
-
-    vis_tool = VisualTool(
-        titles=['Rotor frequency', 'Turbine temperature'],
-        x_info=['Time step'] * 2,
-        y_info=['Normalized frequency', 'Normalized temperature'],
-        legend=['Model', 'Target'],
-        ratio=1/2,
-        show_loss=True
-    )
-
-    network_model = MultilayerSRNN(layer_sizes=[1, 30, 2])
-    network_model.compile('mse', 'adam', {'learning_rate': 0.001})
-    print(network_model.predict(fuel[:10]))
-    network_model.fit(fuel, output, epochs=1000, vizualizer=vis_tool)
+            errors = np.mean(np.abs(target_data - model_result) / target_data * 100, axis=0)
+            if mean_error is None:
+                mean_error = np.mean(errors)
+            elif np.mean(errors) < mean_error and model_path is not None:
+                self.save(model_path)
+                mean_error = np.mean(errors)
+            print("Parameters errors: ", errors)
+            vizualizer.draw([model_result, target_data], list(errors))
