@@ -191,5 +191,44 @@ class LSTM(Layer):
         return outputs
 
 
+class VMLSTM(Layer):
+    """Variable Memory LSTM layer"""
+
+    def __init__(self, output_shape: tuple, memory_shape: tuple, name: str = None):
+        super().__init__(output_shape, name)
+        self._memory_shape = memory_shape
+
+    def _build_layer(self, tensor: tf.Tensor) -> tf.Tensor:
+        state = tf.Variable(tf.zeros(self._memory_shape), trainable=False, name='state')
+        hidden = tf.Variable(tf.zeros(self._shape), trainable=False, name='hidden')
+
+        with tf.name_scope("control_gate"):
+            sc = Dense(self._memory_shape, activation='linear', use_bias=False, name='sc')(state)
+            hc = Dense(self._memory_shape, activation='linear', use_bias=False, name='sc')(hidden)
+            xc = Dense(self._memory_shape, activation='linear', use_bias=True, name='xf')(tensor)
+            control_gate = self._activations['sigmoid'](sc + hc + xc)
+
+        with tf.name_scope("recording_gate"):
+            hr = Dense(self._memory_shape, activation='linear', use_bias=False, name='sc')(hidden)
+            xr = Dense(self._memory_shape, activation='linear', use_bias=True, name='xf')(tensor)
+            recording_gate = self._activations['tanh'](hr + xr)
+
+        new_state = state * control_gate + recording_gate * (1 - control_gate)
+        state_assigner = tf.compat.v1.assign(state, new_state)
+
+        with tf.name_scope("output_gate"):
+            so = Dense(self._shape, activation='linear', use_bias=False, name='sc')(new_state)
+            ho = Dense(self._shape, activation='linear', use_bias=False, name='sc')(hidden)
+            xo = Dense(self._shape, activation='linear', use_bias=True, name='xf')(tensor)
+            output_gate = self._activations['sigmoid'](so + ho + xo)
+
+        hidden_assigner = tf.compat.v1.assign(hidden, output_gate)
+
+        with tf.control_dependencies([state_assigner, hidden_assigner]):
+            outputs = output_gate + 0
+
+        return outputs
+
+
 if __name__ == "__main__":
     pass
