@@ -1,11 +1,86 @@
-"""Visualization tool"""
+"""
+Visualization tool
 
+The Tensorboard realization was taken from
+https://becominghuman.ai/logging-in-tensorboard-with-pytorch-or-any-other-library-c549163dee9e
+"""
+import io
 import math
 import numpy as np
+import tensorflow as tf
+from tensorboard import main as tb
 
+from PIL import Image
 from typing import List
 from matplotlib import pyplot as plt
 
+
+class Tensorboard(object):
+
+    def __init__(self, log_folder: str):
+        self._writer = tf.summary.FileWriter(log_folder)
+        tf.flags.FLAGS.logdir = log_folder
+        tb.run_main()
+
+    def __del__(self):
+        self._writer.close()
+
+    def log_scalar(self, tag, value, global_step: int):
+        summary = tf.Summary()
+        summary.value.add(tag=tag, simple_value=value)
+        self._writer.add_summary(summary, global_step=global_step)
+        self._writer.flush()
+
+    def log_histogram(self, tag, values, global_step: int, bins: int):
+        counts, bin_edges = np.histogram(values, bins=bins)
+
+        hist = tf.HistogramProto()
+        hist.min = float(np.min(values))
+        hist.max = float(np.max(values))
+        hist.num = int(np.prod(values.shape))
+        hist.sum = float(np.sum(values))
+        hist.sum_squares = float(np.sum(values ** 2))
+
+        bin_edges = bin_edges[1:]
+
+        for edge in bin_edges:
+            hist.bucket_limit.append(edge)
+        for c in counts:
+            hist.bucket.append(c)
+
+        summary = tf.Summary()
+        summary.value.add(tag=tag, histo=hist)
+        self._writer.add_summary(summary, global_step=global_step)
+        self._writer.flush()
+
+    def log_image(self, tag, img, global_step: int):
+        s = io.BytesIO()
+        Image.fromarray(img).save(s, format='png')
+
+        img_summary = tf.Summary.Image(encoded_image_string=s.getvalue(),
+                                       height=img.shape[0],
+                                       width=img.shape[1])
+
+        summary = tf.Summary()
+        summary.value.add(tag=tag, image=img_summary)
+        self._writer.add_summary(summary, global_step=global_step)
+        self._writer.flush()
+
+    def log_plot(self, tag, figure, global_step: int):
+        plot_buf = io.BytesIO()
+        figure.savefig(plot_buf, format='png')
+        plot_buf.seek(0)
+        img = Image.open(plot_buf)
+        img_ar = np.array(img)
+
+        img_summary = tf.Summary.Image(encoded_image_string=plot_buf.getvalue(),
+                                       height=img_ar.shape[0],
+                                       width=img_ar.shape[1])
+
+        summary = tf.Summary()
+        summary.value.add(tag=tag, image=img_summary)
+        self._writer.add_summary(summary, global_step=global_step)
+        self._writer.flush()
 
 class EmptyVisualTool(object):
 
