@@ -7,6 +7,12 @@ from typing import List
 from matplotlib import pyplot as plt
 
 
+class EmptyVisualTool(object):
+
+    def draw(self, data_to_draw: List[List[np.ndarray]], losses: List[float] = None):
+        pass
+
+
 class VisualTool(object):
     """Visualization of training process"""
 
@@ -60,10 +66,11 @@ class VisualTool(object):
         self._add_markup_to_params()
 
     def _add_markup_to_loss(self):
-        self._loss_ax.set_title("Losses")
+        self._loss_ax.set_title("Accuracy")
         self._loss_ax.set_xlabel("Epochs")
-        self._loss_ax.set_ylabel("Loss values")
+        self._loss_ax.set_ylabel("Errors, %")
         self._loss_ax.grid(True)
+        self._loss_ax.legend(self._titles, loc="upper left")
 
     def _add_markup_to_params(self):
         for i, ax in enumerate(self._param_axs):
@@ -73,13 +80,13 @@ class VisualTool(object):
             ax.grid(True)
             ax.legend(self._legend, loc="upper left")
 
-    def draw(self, data_to_draw: List[List[np.ndarray]], losses: List[float] = None):
-        if self._show_loss and losses is not None:
+    def draw(self, data_to_draw: List[List[np.ndarray]], accuracy: List[float] = None):
+        if self._show_loss and accuracy is not None:
             try:
-                self._losses: np.ndarray = np.append(self._losses, np.array([losses]), axis=0)
+                self._accuracy: np.ndarray = np.append(self._accuracy, np.array([accuracy]), axis=0)
             except AttributeError:
-                self._losses = np.array([losses])
-            self._draw_ax(self._loss_ax, self._losses, graph_type='log')
+                self._accuracy = np.array([accuracy])
+            self._draw_ax(self._loss_ax, self._accuracy, graph_type='log')
             self._add_markup_to_loss()
             plt.pause(0.0001)
 
@@ -94,6 +101,9 @@ class VisualTool(object):
             ax.plot(data)
         elif graph_type == 'log':
             ax.semilogy(data)
+
+    def show(self):
+        plt.pause(100500)
 
     def __del__(self):
         plt.ioff()

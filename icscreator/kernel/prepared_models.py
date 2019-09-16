@@ -1,58 +1,52 @@
 """Module for different prepared neural network models"""
-
-from icscreator.kernel.layers import Input, Dense, SRNN
+from typing import List, Tuple
 import tensorflow as tf
-from typing import Tuple
+
+from icscreator.kernel.layers import Input, SRNN, LSTM, VMLSTM
+from icscreator.kernel.model import Model
 
 
-def multilayer_srnn(*layer_sizes, activations: Tuple[str] = ('sigmoid',)) -> tf.keras.Model:
-    assert len(layer_sizes) > 1, "Network should have more than one layer"
-    if len(activations) == 1:
-        activations = activations * (len(layer_sizes) - 1)
-    else:
-        assert len(layer_sizes) - 1 == len(activations)
+class MultilayerSRNN(Model):
 
-    model_input = Input(layer_sizes[0])
-    model = SRNN(shape=layer_sizes[1], activation=activations[0], name='srnn_0')(model_input)
-    for e, (layer, activation) in enumerate(zip(layer_sizes[2:], activations[1:])):
-        model = SRNN(shape=layer, activation=activation, name='srnn_{}'.format(e+1))(model)
-    model = tf.keras.Model(model_input, model)
-    return model
+    def __init__(self, layer_sizes: List[int], activations: List[str] = ('sigmoid',), name: str = None):
+        self._layer_sizes = layer_sizes
+        self._activations = activations * (len(layer_sizes) - 1) if len(activations) == 1 else activations
+        super().__init__(name)
 
-
-def multilayer_perceptron(*layer_sizes, activations: Tuple[str] = ('sigmoid',)) -> tf.keras.Model:
-    assert len(layer_sizes) > 1, "Network should have more than one layer"
-    if len(activations) == 1:
-        activations = activations * (len(layer_sizes) - 1)
-    else:
-        assert len(layer_sizes) - 1 == len(activations)
-
-    model_input = Input(layer_sizes[0])
-    model = Dense(shape=layer_sizes[1], activation=activations[0], name='dense_0')(model_input)
-    for e, (layer, activation) in enumerate(zip(layer_sizes[2:], activations[1:])):
-        model = Dense(shape=layer, activation=activation, name='dense_{}'.format(e+1))(model)
-    model = tf.keras.Model(model_input, model)
-    return model
+    def _build_model(self) -> (tf.Tensor, tf.Tensor):
+        model_input = Input(shape=(self._layer_sizes[0],))
+        model = SRNN(shape=(self._layer_sizes[1],), activation=self._activations[0])(model_input)
+        for layer, activation in zip(self._layer_sizes[2:], self._activations[1:]):
+            model = SRNN(shape=(layer,), activation=activation)(model)
+        return model_input, model
 
 
-def elman_network(inputs, hiddens, outputs, activation: str = 'sigmoid') -> tf.keras.Model:
-    inputs = (inputs,) if isinstance(inputs, int) else inputs
-    hiddens = (hiddens,) if isinstance(hiddens, int) else hiddens
-    outputs = (outputs,) if isinstance(outputs, int) else outputs
+class LSTMModel(Model):
 
-    model_input = Input(shape=inputs)
-    model = SRNN(shape=hiddens, activation='relu')(model_input)
-    model = Dense(shape=outputs, activation=activation)(model)
-    model = tf.keras.Model(model_input, model)
-    return model
+    def __init__(self, input_shape: Tuple[int], output_shape: Tuple[int], name: str = None):
+        self._input_shape = input_shape
+        self._output_shape = output_shape
+        super().__init__(name)
+
+    def _build_model(self) -> (tf.Tensor, tf.Tensor):
+        model_input = Input(shape=self._input_shape)
+        model = LSTM(self._output_shape)(model_input)
+        return model_input, model
+
+
+class VMLSTMModel(Model):
+
+    def __init__(self, input_shape: Tuple[int], memory_shape: Tuple[int], output_shape: Tuple[int], name: str = None):
+        self._input_shape = input_shape
+        self._memory_shape = memory_shape
+        self._output_shape = output_shape
+        super().__init__(name)
+
+    def _build_model(self) -> (tf.Tensor, tf.Tensor):
+        model_input = Input(shape=self._input_shape)
+        model = VMLSTM(self._output_shape, self._memory_shape)(model_input)
+        return model_input, model
 
 
 if __name__ == "__main__":
-    elman_model = elman_network(inputs=5, hiddens=(10, 10, 10), outputs=2)
-    elman_model.summary()
-
-    multilayer_model = multilayer_perceptron((3, 4, 5), (6, 7), (8,), activations=('tanh',))
-    multilayer_model.summary()
-
-    multilayer_srnn_model = multilayer_srnn((3, 4, 5), (6, 7), (8,), activations=('tanh',))
-    multilayer_srnn_model.summary()
+    pass
