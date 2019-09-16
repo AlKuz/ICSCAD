@@ -2,54 +2,31 @@
 Main file for launch application
 """
 import numpy as np
-import matplotlib.pyplot as plt
-from icscreator.kernel.models import multilayer_srnn
 
-NAME = 'engine'
-MODEL_FOLDER = './static/models/'
-DATA = "/home/alexander/Projects/ICSCreator/static/data/Data_JC.csv"
+from icscreator.kernel.prepared_models import VMLSTMModel
+from icscreator.kernel.visualization import VisualTool
 
-
-class DataGenerator(object):
-
-    def __init__(self, input_data: np.ndarray, target_data: np.ndarray):
-        assert len(input_data) == len(target_data), "Data should have equal length"
-        self._input_data = input_data
-        self._target_data = target_data
-        self._data_length = len(input_data)
-
-    def __len__(self):
-        return self._data_length
-
-    def run(self, batch=1) -> (np.ndarray, np.ndarray):
-        while True:
-            for i in range(self._data_length // batch):
-                inp = self._input_data[i * batch: (i + 1) * batch]
-                tar = self._target_data[i * batch: (i + 1) * batch]
-                yield [inp * 0.0 + 0.2], [tar * 0.0 + 0.7]
-
+DATA = "../static/data/Data_JC.csv"
+MODEL_PATH = "../static/models"
 
 data = np.genfromtxt(DATA, delimiter=',', skip_header=True)
-fuel = data[::100, 1] / 4.0
-freq = data[::100, 2] / 200000.0
-temp = data[::100, 3] / 1000.0
+fuel = np.expand_dims(data[::100, 1], axis=-1) / 4.0
+freq = np.expand_dims(data[::100, 2], axis=-1) / 200000.0
+temp = np.expand_dims(data[::100, 3], axis=-1) / 1000.0
+output = np.concatenate([freq, temp], axis=-1)
 
-traing_generator = DataGenerator(fuel, freq)
+network_model = VMLSTMModel((1,), (5, 5, 5), (2,))
+network_model.compile('mse', 'adam', {'learning_rate': 0.00001})
+network_model.fit(fuel, output, epochs=100, model_path=MODEL_PATH)
 
-model = multilayer_srnn(1, 10, 1, name=NAME)
-print(model.input.shape)
-print(model.output.shape)
-model.compile(optimizer='adam', loss='mse')
-model.fit_generator(
-    generator=traing_generator.run(batch=1),
-    steps_per_epoch=10000,
-    epochs=100,
+vis_tool = VisualTool(
+    titles=['Rotor frequency', 'Turbine temperature'],
+    x_info=['Time step'] * 2,
+    y_info=['Normalized frequency', 'Normalized temperature'],
+    legend=['Model', 'Target'],
+    ratio=1 / 2,
+    show_loss=False
 )
-
-results = []
-for i in fuel:
-    r = int(model.predict([i]))
-    results.append(r)
-
-plt.plot(results)
-plt.show()
+predicted_data = network_model.predict(fuel)
+vis_tool.draw([predicted_data, output])
+vis_tool.show()

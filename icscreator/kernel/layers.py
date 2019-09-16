@@ -4,13 +4,6 @@ import tensorflow as tf
 from abc import abstractmethod
 
 
-def name_scope(method):
-    def wrapper(self, *args):
-        with tf.name_scope(self._name):
-            return method(self, *args)
-    return wrapper
-
-
 def tensor_mul(tensor1, tensor2) -> tf.Tensor:
     min_length = min(len(tensor1.shape.as_list()), len(tensor2.shape.as_list()))
     axes0 = [-i for i in range(1, min_length + 1)]
